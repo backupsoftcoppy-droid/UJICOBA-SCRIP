@@ -66,6 +66,18 @@ def get_prefix_code(destination_name):
     dest_str = str(destination_name).strip()
     return MARKING_MAP.get(dest_str, dest_str.split()[0][:3].upper())
 
+def clean_remake_status(val):
+    """Sistem normalisasi status REMAKE / Remarks"""
+    if pd.isna(val):
+        return "BAG"
+    val_str = str(val).strip().upper()
+    if val_str in ["BARHAL", "BARHAL."]:
+        return "BARHAL"
+    elif val_str in ["DG ITEM", "DG", "DGITEM"]:
+        return "DG ITEM"
+    else:
+        return "BAG"
+
 RED_FILL = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
 YELLOW_FILL = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 GRAY_HEADER_FILL = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
@@ -114,22 +126,20 @@ def process_excel_data(uploaded_file):
     if len(df_raw) < 4:
         raise ValueError("File Excel tidak memiliki cukup baris data (minimal 4 baris).")
 
-    # Ambil 9 kolom (Kolom A s/d I) untuk membaca kolom Remake
     df_data = df_raw.iloc[3:, :9].copy()
     df_data.columns = ['Tanggal', 'Vendor', 'Sc_Origin', 'Sc_Destination', 'Lt_Number', 'To_Number', 'Gross_Weight', 'Remake', 'Total']
 
-    # Filter data valid berdasarkan To_Number
     df_data = df_data[df_data['To_Number'].notna()].copy()
     if df_data.empty:
         raise ValueError("Tidak ditemukan data transaksi yang memiliki 'To_Number' (Kolom F) di baris 4 ke bawah.")
 
-    # Format Tanggal & Gross Weight
     df_data['Tanggal'] = pd.to_datetime(df_data['Tanggal'], errors='coerce').dt.strftime('%Y-%m-%d')
     df_data['Gross_Weight'] = df_data['Gross_Weight'].astype(str).str.replace(',', '.')
     df_data['Gross_Weight'] = pd.to_numeric(df_data['Gross_Weight'], errors='coerce').fillna(0.0)
-    df_data['Remake'] = df_data['Remake'].fillna("")
+    
+    # Pengolahan Nilai REMAKE
+    df_data['Remake'] = df_data['Remake'].apply(clean_remake_status)
 
-    # Sorting
     df_reversed = df_data.iloc[::-1].copy()
     df_sorted = df_reversed.sort_values(by='Sc_Destination', kind='stable', ascending=True).reset_index(drop=True)
     
@@ -255,7 +265,9 @@ def process_excel_data(uploaded_file):
 
         prefix = get_prefix_code(dest)
         marking = f"{prefix}-C1-{row.bag_num}"
-        remarks = "BAG"
+        
+        # Remarks disesuaikan dengan nilai Remake (BARHAL, DG ITEM, atau BAG)
+        remarks = row.Remake
 
         formula_ext_num = f'=G{idx}&"/"&E{idx}&"/"&I{idx}'
         ext_num_val_for_df = f"{marking}/{lt_num}/{remarks}"
