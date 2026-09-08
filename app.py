@@ -114,13 +114,57 @@ def process_excel_data(uploaded_file):
     if len(df_raw) < 4:
         raise ValueError("File Excel tidak memiliki cukup baris data (minimal 4 baris).")
 
-    # PERBAIKAN: Kolom indeks 3 dan 4 dipetakan sesuai urutan (Lt_Number lalu Sc_Destination)
+    # Ambil baris header (baris ke-3) & data (baris ke-4 dan seterusnya)
+    headers = df_raw.iloc[2, :8].fillna('').astype(str).tolist()
     df_data = df_raw.iloc[3:, :8].copy()
-    df_data.columns = ['Tanggal', 'Vendor', 'Sc_Origin', 'Lt_Number', 'Sc_Destination', 'To_Number', 'Gross_Weight', 'Total']
+    df_data.columns = [f"col_{i}" for i in range(df_data.shape[1])]
+
+    # Deteksi otomatis posisi kolom berdasarkan nama header dan pola data
+    col_map = {}
+    for i in range(df_data.shape[1]):
+        h_text = headers[i].strip().upper()
+        
+        # Ambil contoh sampel data pertama yang tidak kosong
+        sample_series = df_data.iloc[:, i].dropna()
+        sample_val = str(sample_series.iloc[0]).strip() if not sample_series.empty else ""
+
+        if h_text in ['TGL', 'TANGGAL', 'DATE']:
+            col_map[f"col_{i}"] = 'Tanggal'
+        elif 'VENDOR' in h_text:
+            col_map[f"col_{i}"] = 'Vendor'
+        elif 'ORGIN' in h_text or 'ORIGIN' in h_text:
+            col_map[f"col_{i}"] = 'Sc_Origin'
+        # Deteksi LT NUMBER: jika header ada kata LT atau isi data diawali 'LT'
+        elif 'LT NUMBER' in h_text or 'LT' in h_text or sample_val.startswith('LT'):
+            col_map[f"col_{i}"] = 'Lt_Number'
+        # Deteksi DESTINATION: jika header ada kata DESTINATION atau isi data berakhiran 'DC' / 'Hub'
+        elif 'DESTINATION' in h_text or 'DEST' in h_text or sample_val.endswith(('DC', 'Hub')):
+            col_map[f"col_{i}"] = 'Sc_Destination'
+        elif 'TO' in h_text and 'TOTAL' not in h_text:
+            col_map[f"col_{i}"] = 'To_Number'
+        elif any(k in h_text for k in ['GROSS', 'GROOS', 'WEIGHT', 'GW']):
+            col_map[f"col_{i}"] = 'Gross_Weight'
+        elif 'TOTAL' in h_text:
+            col_map[f"col_{i}"] = 'Total'
+
+    # Jika mapping otomatis dari header kurang lengkap, pakaikan fallback posisi default
+    default_names = ['Tanggal', 'Vendor', 'Sc_Origin', 'Lt_Number', 'Sc_Destination', 'To_Number', 'Gross_Weight', 'Total']
+    for i in range(df_data.shape[1]):
+        if f"col_{i}" not in col_map:
+            col_map[f"col_{i}"] = default_names[i]
+
+    df_data = df_data.rename(columns=col_map)
+
+    # SWAP PERBAIKAN: Jika data masih tertukar akibat header terbalik di file mentah
+    sample_lt = str(df_data['Lt_Number'].dropna().iloc[0]) if not df_data['Lt_Number'].dropna().empty else ""
+    sample_dest = str(df_data['Sc_Destination'].dropna().iloc[0]) if not df_data['Sc_Destination'].dropna().empty else ""
+    
+    if sample_lt.endswith(('DC', 'Hub')) or sample_dest.startswith('LT'):
+        df_data['Lt_Number'], df_data['Sc_Destination'] = df_data['Sc_Destination'], df_data['Lt_Number']
 
     df_data = df_data[df_data['To_Number'].notna()].copy()
     if df_data.empty:
-        raise ValueError("Tidak ditemukan data transaksi yang memiliki 'To_Number' (Kolom F) di baris 4 ke bawah.")
+        raise ValueError("Tidak ditemukan data transaksi yang memiliki 'To_Number' di baris 4 ke bawah.")
 
     df_data['Tanggal'] = pd.to_datetime(df_data['Tanggal'], errors='coerce').dt.strftime('%Y-%m-%d')
 
@@ -174,6 +218,7 @@ def process_excel_data(uploaded_file):
     ws_sjm.cell(2, 8).alignment = ALIGN_FULL_CENTER
     ws_sjm.cell(2, 8).border = BORDER_THIN
 
+    # Header SJM selalu rapi: DESTINATION dulu baru LT NUMBER
     headers_sjm = ['TGL', 'Vendor', 'SC Orgin', 'DESTINATION', 'LT NUMBER', 'TO NUMBER', 'Gross Weight', 'TOTAL']
     ws_sjm.append(headers_sjm)
     for c_idx in range(1, 9):
