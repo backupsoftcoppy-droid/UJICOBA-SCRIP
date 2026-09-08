@@ -226,7 +226,7 @@ def process_excel_data(uploaded_file):
     # 2. SHEET 'MARKING'
     ws_marking = wb.create_sheet(title="MARKING")
 
-    ws_marking.append(["MARKING SPX OSO SUB DC CYCLE 1 HB"] + [""] * 10)
+    ws_marking.append(["MARKING SPX OSO SUB DC CYCLE "] + [""] * 10)
     ws_marking.merge_cells("A1:K1")
     ws_marking.row_dimensions[1].height = 28
 
