@@ -114,19 +114,69 @@ def process_excel_data(uploaded_file):
     if len(df_raw) < 4:
         raise ValueError("File Excel tidak memiliki cukup baris data (minimal 4 baris).")
 
-    # PERBAIKAN: Kolom indeks 3 dan 4 dipetakan sesuai urutan (Lt_Number lalu Sc_Destination)
-    df_data = df_raw.iloc[3:, :8].copy()
-    df_data.columns = ['Tanggal', 'Vendor', 'Sc_Origin', 'Lt_Number', 'Sc_Destination', 'To_Number', 'Gross_Weight', 'Total']
+    # -------------------------------------------------------------
+    # PEMBACAAN HEADER DINAMIS (Bukan Berdasarkan Urutan Indeks Kolom)
+    # -------------------------------------------------------------
+    header_row_idx = None
+    for idx, row in df_raw.iterrows():
+        row_str = row.astype(str).str.lower().tolist()
+        # Mencari baris tempat header berada
+        if any("to number" in item or "to_number" in item for item in row_str):
+            header_row_idx = idx
+            break
 
-    df_data = df_data[df_data['To_Number'].notna()].copy()
+    if header_row_idx is None:
+        # Fallback jika header tidak ketemu secara spesifik, pakai baris ke-3 (indeks 2)
+        header_row_idx = 2
+
+    # Ambil header dan bersihkan dari spasi/karakter tidak perlu
+    raw_headers = [str(val).strip() for val in df_raw.iloc[header_row_idx].values]
+    
+    # Ambil data setelah baris header
+    df_data = df_raw.iloc[header_row_idx + 1:].copy()
+    df_data.columns = raw_headers
+
+    # Normalisasi Nama Kolom untuk Pencarian yang Fleksibel
+    col_map = {}
+    for col in df_data.columns:
+        c_lower = str(col).lower().replace("_", " ").strip()
+        if "tgl" in c_lower or "tanggal" in c_lower or "date" in c_lower:
+            col_map[col] = 'Tanggal'
+        elif "vendor" in c_lower:
+            col_map[col] = 'Vendor'
+        elif "origin" in c_lower:
+            col_map[col] = 'Sc_Origin'
+        elif "dest" in c_lower or "tujuan" in c_lower:
+            col_map[col] = 'Sc_Destination'
+        elif "lt" in c_lower:
+            col_map[col] = 'Lt_Number'
+        elif "to" in c_lower and "total" not in c_lower:
+            col_map[col] = 'To_Number'
+        elif "weight" in c_lower or "berat" in c_lower or "gross" in c_lower:
+            col_map[col] = 'Gross_Weight'
+
+    df_data = df_data.rename(columns=col_map)
+
+    # Validasi kelengkapan kolom penting
+    required_cols = ['Tanggal', 'Vendor', 'Sc_Origin', 'Lt_Number', 'Sc_Destination', 'To_Number', 'Gross_Weight']
+    for req in required_cols:
+        if req not in df_data.columns:
+            # Jika ada kolom wajib yang tidak ditemukan nama headernya
+            df_data[req] = ""
+
+    # Filter data valid
+    df_data = df_data[df_data['To_Number'].notna() & (df_data['To_Number'].astype(str).str.strip() != "")].copy()
     if df_data.empty:
-        raise ValueError("Tidak ditemukan data transaksi yang memiliki 'To_Number' (Kolom F) di baris 4 ke bawah.")
+        raise ValueError("Tidak ditemukan data transaksi yang valid berdasarkan kolom 'To Number'.")
 
+    # Format Tanggal
     df_data['Tanggal'] = pd.to_datetime(df_data['Tanggal'], errors='coerce').dt.strftime('%Y-%m-%d')
 
+    # Format Gross Weight aman (ubah koma ke titik bila berupa string)
     df_data['Gross_Weight'] = df_data['Gross_Weight'].astype(str).str.replace(',', '.')
     df_data['Gross_Weight'] = pd.to_numeric(df_data['Gross_Weight'], errors='coerce').fillna(0.0)
 
+    # Sorting & Bag Indexing
     df_reversed = df_data.iloc[::-1].copy()
     df_sorted = df_reversed.sort_values(by='Sc_Destination', kind='stable', ascending=True).reset_index(drop=True)
     
