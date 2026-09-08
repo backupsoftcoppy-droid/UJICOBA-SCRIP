@@ -114,8 +114,9 @@ def process_excel_data(uploaded_file):
     if len(df_raw) < 4:
         raise ValueError("File Excel tidak memiliki cukup baris data (minimal 4 baris).")
 
+    # PERBAIKAN: Kolom indeks 3 dan 4 dipetakan sesuai urutan (Lt_Number lalu Sc_Destination)
     df_data = df_raw.iloc[3:, :8].copy()
-    df_data.columns = ['Tanggal', 'Vendor', 'Sc_Origin', 'Sc_Destination', 'Lt_Number', 'To_Number', 'Gross_Weight', 'Total']
+    df_data.columns = ['Tanggal', 'Vendor', 'Sc_Origin', 'Lt_Number', 'Sc_Destination', 'To_Number', 'Gross_Weight', 'Total']
 
     df_data = df_data[df_data['To_Number'].notna()].copy()
     if df_data.empty:
@@ -377,7 +378,6 @@ def process_excel_data(uploaded_file):
     # 5. SHEET 'Sheet4' (FORMAT RINGKASAN 3LC MARKING)
     ws_sheet4 = wb.create_sheet(title="Sheet4")
 
-    # Grouping berdasarkan Prefix (Kode 3LC Marking)
     prefix_summary = df_m.groupby("Prefix", sort=False).agg(
         Count_TO=("To Number", "count"),
         Sum_Gw=("Gross Weight", "sum")
