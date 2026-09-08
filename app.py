@@ -114,63 +114,22 @@ def process_excel_data(uploaded_file):
     if len(df_raw) < 4:
         raise ValueError("File Excel tidak memiliki cukup baris data (minimal 4 baris).")
 
-    # Ambil baris header (baris ke-3) & data (baris ke-4 dan seterusnya)
-    headers = df_raw.iloc[2, :8].fillna('').astype(str).tolist()
-    df_data = df_raw.iloc[3:, :8].copy()
-    df_data.columns = [f"col_{i}" for i in range(df_data.shape[1])]
+    # Ambil 9 kolom (Kolom A s/d I) untuk membaca kolom Remake
+    df_data = df_raw.iloc[3:, :9].copy()
+    df_data.columns = ['Tanggal', 'Vendor', 'Sc_Origin', 'Sc_Destination', 'Lt_Number', 'To_Number', 'Gross_Weight', 'Remake', 'Total']
 
-    # Deteksi otomatis posisi kolom berdasarkan nama header dan pola data
-    col_map = {}
-    for i in range(df_data.shape[1]):
-        h_text = headers[i].strip().upper()
-        
-        # Ambil contoh sampel data pertama yang tidak kosong
-        sample_series = df_data.iloc[:, i].dropna()
-        sample_val = str(sample_series.iloc[0]).strip() if not sample_series.empty else ""
-
-        if h_text in ['TGL', 'TANGGAL', 'DATE']:
-            col_map[f"col_{i}"] = 'Tanggal'
-        elif 'VENDOR' in h_text:
-            col_map[f"col_{i}"] = 'Vendor'
-        elif 'ORGIN' in h_text or 'ORIGIN' in h_text:
-            col_map[f"col_{i}"] = 'Sc_Origin'
-        # Deteksi LT NUMBER: jika header ada kata LT atau isi data diawali 'LT'
-        elif 'LT NUMBER' in h_text or 'LT' in h_text or sample_val.startswith('LT'):
-            col_map[f"col_{i}"] = 'Lt_Number'
-        # Deteksi DESTINATION: jika header ada kata DESTINATION atau isi data berakhiran 'DC' / 'Hub'
-        elif 'DESTINATION' in h_text or 'DEST' in h_text or sample_val.endswith(('DC', 'Hub')):
-            col_map[f"col_{i}"] = 'Sc_Destination'
-        elif 'TO' in h_text and 'TOTAL' not in h_text:
-            col_map[f"col_{i}"] = 'To_Number'
-        elif any(k in h_text for k in ['GROSS', 'GROOS', 'WEIGHT', 'GW']):
-            col_map[f"col_{i}"] = 'Gross_Weight'
-        elif 'TOTAL' in h_text:
-            col_map[f"col_{i}"] = 'Total'
-
-    # Jika mapping otomatis dari header kurang lengkap, pakaikan fallback posisi default
-    default_names = ['Tanggal', 'Vendor', 'Sc_Origin', 'Lt_Number', 'Sc_Destination', 'To_Number', 'Gross_Weight', 'Total']
-    for i in range(df_data.shape[1]):
-        if f"col_{i}" not in col_map:
-            col_map[f"col_{i}"] = default_names[i]
-
-    df_data = df_data.rename(columns=col_map)
-
-    # SWAP PERBAIKAN: Jika data masih tertukar akibat header terbalik di file mentah
-    sample_lt = str(df_data['Lt_Number'].dropna().iloc[0]) if not df_data['Lt_Number'].dropna().empty else ""
-    sample_dest = str(df_data['Sc_Destination'].dropna().iloc[0]) if not df_data['Sc_Destination'].dropna().empty else ""
-    
-    if sample_lt.endswith(('DC', 'Hub')) or sample_dest.startswith('LT'):
-        df_data['Lt_Number'], df_data['Sc_Destination'] = df_data['Sc_Destination'], df_data['Lt_Number']
-
+    # Filter data valid berdasarkan To_Number
     df_data = df_data[df_data['To_Number'].notna()].copy()
     if df_data.empty:
-        raise ValueError("Tidak ditemukan data transaksi yang memiliki 'To_Number' di baris 4 ke bawah.")
+        raise ValueError("Tidak ditemukan data transaksi yang memiliki 'To_Number' (Kolom F) di baris 4 ke bawah.")
 
+    # Format Tanggal & Gross Weight
     df_data['Tanggal'] = pd.to_datetime(df_data['Tanggal'], errors='coerce').dt.strftime('%Y-%m-%d')
-
     df_data['Gross_Weight'] = df_data['Gross_Weight'].astype(str).str.replace(',', '.')
     df_data['Gross_Weight'] = pd.to_numeric(df_data['Gross_Weight'], errors='coerce').fillna(0.0)
+    df_data['Remake'] = df_data['Remake'].fillna("")
 
+    # Sorting
     df_reversed = df_data.iloc[::-1].copy()
     df_sorted = df_reversed.sort_values(by='Sc_Destination', kind='stable', ascending=True).reset_index(drop=True)
     
@@ -192,36 +151,35 @@ def process_excel_data(uploaded_file):
         else:
             sub_title_text = str(sub_title_raw)
 
-    code_box = str(df_raw.iloc[0, 7]) if (df_raw.shape[1] >= 8 and pd.notna(df_raw.iloc[0, 7])) else ""
+    code_box = str(df_raw.iloc[0, 8]) if (df_raw.shape[1] >= 9 and pd.notna(df_raw.iloc[0, 8])) else ""
 
-    ws_sjm.append([title_text, "", "", "", "", "", "", code_box])
-    ws_sjm.append([sub_title_text, "", "", "", "", "", "", ""])
+    ws_sjm.append([title_text, "", "", "", "", "", "", "", code_box])
+    ws_sjm.append([sub_title_text, "", "", "", "", "", "", "", ""])
 
-    ws_sjm.merge_cells("A1:G1")
-    ws_sjm.merge_cells("A2:G2")
+    ws_sjm.merge_cells("A1:H1")
+    ws_sjm.merge_cells("A2:H2")
 
     for r in [1, 2]:
-        for c in range(1, 8):
+        for c in range(1, 9):
             cell = ws_sjm.cell(row=r, column=c)
             cell.fill = BLUE_SJM_FILL
             cell.font = FONT_HEADER
             cell.alignment = ALIGN_FULL_CENTER
             cell.border = BORDER_THIN
 
-    ws_sjm.cell(1, 8).fill = BLUE_SJM_FILL
-    ws_sjm.cell(1, 8).font = FONT_HEADER
-    ws_sjm.cell(1, 8).alignment = ALIGN_FULL_CENTER
-    ws_sjm.cell(1, 8).border = BORDER_THIN
+    ws_sjm.cell(1, 9).fill = BLUE_SJM_FILL
+    ws_sjm.cell(1, 9).font = FONT_HEADER
+    ws_sjm.cell(1, 9).alignment = ALIGN_FULL_CENTER
+    ws_sjm.cell(1, 9).border = BORDER_THIN
 
-    ws_sjm.cell(2, 8).value = len(df_sorted)
-    ws_sjm.cell(2, 8).font = FONT_BIG_TOTAL
-    ws_sjm.cell(2, 8).alignment = ALIGN_FULL_CENTER
-    ws_sjm.cell(2, 8).border = BORDER_THIN
+    ws_sjm.cell(2, 9).value = len(df_sorted)
+    ws_sjm.cell(2, 9).font = FONT_BIG_TOTAL
+    ws_sjm.cell(2, 9).alignment = ALIGN_FULL_CENTER
+    ws_sjm.cell(2, 9).border = BORDER_THIN
 
-    # Header SJM selalu rapi: DESTINATION dulu baru LT NUMBER
-    headers_sjm = ['TGL', 'Vendor', 'SC Orgin', 'DESTINATION', 'LT NUMBER', 'TO NUMBER', 'Gross Weight', 'TOTAL']
+    headers_sjm = ['TGL', 'Vendor', 'SC Orgin', 'DESTINATION', 'LT NUMBER', 'TO NUMBER', 'Gross Weight', 'REMAKE', 'TOTAL']
     ws_sjm.append(headers_sjm)
-    for c_idx in range(1, 9):
+    for c_idx in range(1, 10):
         cell = ws_sjm.cell(row=3, column=c_idx)
         cell.fill = GRAY_HEADER_FILL
         cell.font = FONT_HEADER
@@ -229,9 +187,9 @@ def process_excel_data(uploaded_file):
         cell.border = BORDER_THIN
 
     for row in df_sorted.itertuples():
-        ws_sjm.append([row.Tanggal, row.Vendor, row.Sc_Origin, row.Sc_Destination, row.Lt_Number, row.To_Number, row.Gross_Weight, ""])
+        ws_sjm.append([row.Tanggal, row.Vendor, row.Sc_Origin, row.Sc_Destination, row.Lt_Number, row.To_Number, row.Gross_Weight, row.Remake, ""])
 
-    for row in ws_sjm.iter_rows(min_row=4, max_row=ws_sjm.max_row, min_col=1, max_col=8):
+    for row in ws_sjm.iter_rows(min_row=4, max_row=ws_sjm.max_row, min_col=1, max_col=9):
         for cell in row:
             cell.border = BORDER_THIN
             cell.font = FONT_REGULAR_BLACK
@@ -241,10 +199,10 @@ def process_excel_data(uploaded_file):
 
     tot_sjm_row = ws_sjm.max_row + 1
     total_sjm_gw = round(df_sorted['Gross_Weight'].sum(), 2)
-    ws_sjm.append(["TOTAL", "", "", "", "", "", total_sjm_gw, ""])
+    ws_sjm.append(["TOTAL", "", "", "", "", "", total_sjm_gw, "", ""])
     ws_sjm.merge_cells(start_row=tot_sjm_row, start_column=1, end_row=tot_sjm_row, end_column=6)
 
-    for c_idx in range(1, 9):
+    for c_idx in range(1, 10):
         cell = ws_sjm.cell(row=tot_sjm_row, column=c_idx)
         cell.fill = BLUE_SJM_FILL
         cell.font = FONT_HEADER
@@ -302,7 +260,7 @@ def process_excel_data(uploaded_file):
         formula_ext_num = f'=G{idx}&"/"&E{idx}&"/"&I{idx}'
         ext_num_val_for_df = f"{marking}/{lt_num}/{remarks}"
 
-        marking_rows.append([tgl, vendor, origin, dest, lt_num, to_num, marking, gw, remarks, ext_num_val_for_df, gw, idx, prefix])
+        marking_rows.append([tgl, vendor, origin, dest, lt_num, to_num, marking, gw, remarks, ext_num_val_for_df, gw, idx])
         ws_marking.append([tgl, vendor, origin, dest, lt_num, to_num, marking, gw, remarks, formula_ext_num, gw])
 
     for row in ws_marking.iter_rows(min_row=4, max_row=ws_marking.max_row, min_col=1, max_col=11):
@@ -313,7 +271,7 @@ def process_excel_data(uploaded_file):
             if isinstance(c.value, (float, int)):
                 c.number_format = '#,##0.00'
 
-    df_m = pd.DataFrame(marking_rows, columns=headers_m + ['marking_row_idx', 'Prefix'])
+    df_m = pd.DataFrame(marking_rows, columns=headers_m + ['marking_row_idx'])
     df_m["Clear Gw"] = pd.to_numeric(df_m["Clear Gw"], errors='coerce').fillna(0)
     df_m["Gross Weight"] = pd.to_numeric(df_m["Gross Weight"], errors='coerce').fillna(0)
 
@@ -420,32 +378,6 @@ def process_excel_data(uploaded_file):
         max_len = max(len(str(cell.value or '')) for cell in col)
         ws_sheet3.column_dimensions[col_letter].width = max(max_len + 12, 28)
 
-    # 5. SHEET 'Sheet4' (FORMAT RINGKASAN 3LC MARKING)
-    ws_sheet4 = wb.create_sheet(title="Sheet4")
-
-    prefix_summary = df_m.groupby("Prefix", sort=False).agg(
-        Count_TO=("To Number", "count"),
-        Sum_Gw=("Gross Weight", "sum")
-    ).reset_index()
-
-    for row in prefix_summary.itertuples(index=False):
-        prefix_code = row[0]
-        q_val = int(row[1])
-        gw_val = f"{row[2]:,.3f}".replace(',', 'X').replace('.', ',').replace('X', '.')
-        if gw_val.endswith(',000'):
-            gw_val = gw_val[:-4]
-        
-        formatted_str = f"{prefix_code} : {q_val} Q - {gw_val} KG"
-        ws_sheet4.append([formatted_str])
-
-    for row in ws_sheet4.iter_rows(min_row=1, max_row=ws_sheet4.max_row, min_col=1, max_col=1):
-        for cell in row:
-            cell.border = BORDER_THIN
-            cell.font = FONT_REGULAR_BLACK
-            cell.alignment = ALIGN_FULL_CENTER
-
-    autofit_table_columns(ws_sheet4, start_row=1, min_width=25)
-
     output_stream = io.BytesIO()
     wb.save(output_stream)
     output_stream.seek(0)
@@ -455,8 +387,8 @@ def process_excel_data(uploaded_file):
 # ==========================================
 # 4. ANTARMUKA UTAMA (MAIN APP UI)
 # ==========================================
-st.title("📦 Lion parcel Data Formatting & Marking Generator")
-st.markdown("Unggah file Excel raw data Anda di bawah ini untuk menghasilkan file Excel dengan sheet **SJM**, **MARKING**, **PVT**, **Sheet3**, dan **Sheet4**.")
+st.title("📦 Lion Parcel Data Formatting & Marking Generator")
+st.markdown("Unggah file Excel raw data Anda di bawah ini untuk menghasilkan file Excel dengan sheet **SJM**, **MARKING**, **PVT**, dan **Sheet3**.")
 
 with st.sidebar:
     st.write("🔓 **Sesi Login Aktif**")
@@ -485,3 +417,4 @@ if uploaded_file is not None:
                 )
             except Exception as e:
                 st.error(f"Terjadi kesalahan saat memproses data: {e}")
+                
