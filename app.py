@@ -117,7 +117,7 @@ def autofit_table_columns(ws, start_row=1, min_width=15):
         ws.column_dimensions[col_letter].width = max(max_len + 8, min_width)
 
 # ==========================================
-# 3. FUNGSI PEMROSESAN DATA
+# 3. FUNGSI PEMROSESAN DATA (DINAMIS & AMAN)
 # ==========================================
 def process_excel_data(uploaded_file):
     df_raw = pd.read_excel(uploaded_file, sheet_name=0, header=None)
@@ -126,8 +126,18 @@ def process_excel_data(uploaded_file):
     if len(df_raw) < 4:
         raise ValueError("File Excel tidak memiliki cukup baris data (minimal 4 baris).")
 
-    df_data = df_raw.iloc[3:, :9].copy()
-    df_data.columns = ['Tanggal', 'Vendor', 'Sc_Origin', 'Sc_Destination', 'Lt_Number', 'To_Number', 'Gross_Weight', 'Remake', 'Total']
+    df_data = df_raw.iloc[3:].copy()
+    expected_cols = ['Tanggal', 'Vendor', 'Sc_Origin', 'Sc_Destination', 'Lt_Number', 'To_Number', 'Gross_Weight', 'Remake', 'Total']
+    
+    if df_data.shape[1] >= len(expected_cols):
+        df_data = df_data.iloc[:, :len(expected_cols)]
+        df_data.columns = expected_cols
+    else:
+        cols_present = list(df_data.columns[:df_data.shape[1]])
+        df_data = df_data.iloc[:, :len(cols_present)]
+        df_data.columns = expected_cols[:len(cols_present)]
+        for missing_col in expected_cols[len(cols_present):]:
+            df_data[missing_col] = None
 
     df_data = df_data[df_data['To_Number'].notna()].copy()
     if df_data.empty:
@@ -137,7 +147,6 @@ def process_excel_data(uploaded_file):
     df_data['Gross_Weight'] = df_data['Gross_Weight'].astype(str).str.replace(',', '.')
     df_data['Gross_Weight'] = pd.to_numeric(df_data['Gross_Weight'], errors='coerce').fillna(0.0)
     
-    # Pengolahan Nilai REMAKE
     df_data['Remake'] = df_data['Remake'].apply(clean_remake_status)
 
     df_reversed = df_data.iloc[::-1].copy()
@@ -265,8 +274,6 @@ def process_excel_data(uploaded_file):
 
         prefix = get_prefix_code(dest)
         marking = f"{prefix}-C1-{row.bag_num}"
-        
-        # Remarks disesuaikan dengan nilai Remake (BARHAL, DG ITEM, atau BAG)
         remarks = row.Remake
 
         formula_ext_num = f'=G{idx}&"/"&E{idx}&"/"&I{idx}'
@@ -429,4 +436,3 @@ if uploaded_file is not None:
                 )
             except Exception as e:
                 st.error(f"Terjadi kesalahan saat memproses data: {e}")
-                
