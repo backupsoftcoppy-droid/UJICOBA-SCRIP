@@ -116,61 +116,64 @@ def autofit_table_columns(ws, start_row=1, min_width=15):
                 max_len = len(val_str)
         ws.column_dimensions[col_letter].width = max(max_len + 8, min_width)
 
-# ==========================================
-# 3. FUNGSI PEMROSESAN DATA (DINAMIS & AMAN)
-# ==========================================
 def process_excel_data(uploaded_file):
     df_raw = pd.read_excel(uploaded_file, sheet_name=0, header=None)
     wb = openpyxl.Workbook()
 
-    if len(df_raw) < 4:
-        raise ValueError("File Excel tidak memiliki cukup baris data (minimal 4 baris).")
+    if len(df_raw) < 5:
+        raise ValueError("File Excel tidak memiliki cukup baris data (minimal 5 baris).")
 
-    df_data = df_raw.iloc[3:].copy()
-    expected_cols = ['Tanggal', 'Vendor', 'Sc_Origin', 'Sc_Destination', 'Lt_Number', 'To_Number', 'Gross_Weight', 'Remake', 'Total']
+    # 1. BACA INFORMASI HEADER / TITLE DARI BARIS 1 & 3
+    title_text = str(df_raw.iloc[0, 0]) if pd.notna(df_raw.iloc[0, 0]) else "SURAT JALAN MANUAL"
     
-    if df_data.shape[1] >= len(expected_cols):
-        df_data = df_data.iloc[:, :len(expected_cols)]
-        df_data.columns = expected_cols
-    else:
-        cols_present = list(df_data.columns[:df_data.shape[1]])
-        df_data = df_data.iloc[:, :len(cols_present)]
-        df_data.columns = expected_cols[:len(cols_present)]
-        for missing_col in expected_cols[len(cols_present):]:
-            df_data[missing_col] = None
-
-    df_data = df_data[df_data['To_Number'].notna()].copy()
-    if df_data.empty:
-        raise ValueError("Tidak ditemukan data transaksi yang memiliki 'To_Number' (Kolom F) di baris 4 ke bawah.")
-
-    df_data['Tanggal'] = pd.to_datetime(df_data['Tanggal'], errors='coerce').dt.strftime('%Y-%m-%d')
-    df_data['Gross_Weight'] = df_data['Gross_Weight'].astype(str).str.replace(',', '.')
-    df_data['Gross_Weight'] = pd.to_numeric(df_data['Gross_Weight'], errors='coerce').fillna(0.0)
-    
-    df_data['Remake'] = df_data['Remake'].apply(clean_remake_status)
-
-    df_reversed = df_data.iloc[::-1].copy()
-    df_sorted = df_reversed.sort_values(by='Sc_Destination', kind='stable', ascending=True).reset_index(drop=True)
-    
-    df_sorted['to_index'] = df_sorted.groupby('Sc_Destination').cumcount()
-    df_sorted['bag_num'] = (df_sorted['to_index'] // 15) + 1
-
-    # 1. SHEET 'SJM'
-    ws_sjm = wb.active
-    ws_sjm.title = "SJM"
-
-    title_text = str(df_raw.iloc[0, 0]) if (not pd.isna(df_raw.iloc[0, 0])) else "SURAT JALAN MANUAL"
-
-    sub_title_raw = df_raw.iloc[1, 0] if len(df_raw) > 1 else ""
+    sub_title_raw = df_raw.iloc[2, 0] if pd.notna(df_raw.iloc[2, 0]) else ""
     sub_title_text = ""
     if pd.notna(sub_title_raw):
         parsed_date = pd.to_datetime(sub_title_raw, errors='coerce')
         if pd.notnull(parsed_date):
             sub_title_text = parsed_date.strftime('%d %B %Y').upper() + " TRIP 1"
         else:
-            sub_title_text = str(sub_title_raw)
+            sub_title_text = str(sub_title_raw).upper()
 
-    code_box = str(df_raw.iloc[0, 8]) if (df_raw.shape[1] >= 9 and pd.notna(df_raw.iloc[0, 8])) else ""
+    # Ambil Kode Box / Plat Nomor dari Kolom H (Indeks 7) atau I (Indeks 8)
+    code_box = ""
+    if df_raw.shape[1] >= 8 and pd.notna(df_raw.iloc[0, 7]):
+        code_box = str(df_raw.iloc[0, 7])
+    elif df_raw.shape[1] >= 9 and pd.notna(df_raw.iloc[0, 8]):
+        code_box = str(df_raw.iloc[0, 8])
+
+    # 2. EKSTRAKSI DATA TRANSAKSI (Mulai dari Baris ke-5 / Indeks 4)
+    df_data = df_raw.iloc[4:].copy()
+
+    # Petakan 8 kolom asli dari file mentah
+    raw_cols = ['Tanggal', 'Vendor', 'Sc_Origin', 'Sc_Destination', 'Lt_Number', 'To_Number', 'Gross_Weight', 'Total_Raw']
+    df_data = df_data.iloc[:, :len(raw_cols)]
+    df_data.columns = raw_cols[:df_data.shape[1]]
+
+    # Filter baris yang memiliki TO_Number valid
+    df_data = df_data[df_data['To_Number'].notna()].copy()
+    if df_data.empty:
+        raise ValueError("Tidak ditemukan data transaksi yang memiliki 'To_Number' (Kolom F) di baris 5 ke bawah.")
+
+    # Kolom Remake tidak ada pada file mentah, diset default ke "BAG"
+    df_data['Remake'] = "BAG"
+
+    # Formatting Tgl & Berat
+    df_data['Tanggal'] = pd.to_datetime(df_data['Tanggal'], errors='coerce').dt.strftime('%Y-%m-%d')
+    df_data['Gross_Weight'] = df_data['Gross_Weight'].astype(str).str.replace(',', '.')
+    df_data['Gross_Weight'] = pd.to_numeric(df_data['Gross_Weight'], errors='coerce').fillna(0.0)
+
+    # Urutkan berdasarkan Sc_Destination secara stabil
+    df_sorted = df_data.sort_values(by='Sc_Destination', kind='stable', ascending=True).reset_index(drop=True)
+    
+    df_sorted['to_index'] = df_sorted.groupby('Sc_Destination').cumcount()
+    df_sorted['bag_num'] = (df_sorted['to_index'] // 15) + 1
+
+    # ----------------------------------------------------
+    # 1. SHEET 'SJM'
+    # ----------------------------------------------------
+    ws_sjm = wb.active
+    ws_sjm.title = "SJM"
 
     ws_sjm.append([title_text, "", "", "", "", "", "", "", code_box])
     ws_sjm.append([sub_title_text, "", "", "", "", "", "", "", ""])
@@ -232,7 +235,9 @@ def process_excel_data(uploaded_file):
 
     autofit_table_columns(ws_sjm, start_row=3, min_width=16)
 
+    # ----------------------------------------------------
     # 2. SHEET 'MARKING'
+    # ----------------------------------------------------
     ws_marking = wb.create_sheet(title="MARKING")
 
     ws_marking.append(["MARKING SPX OSO SUB DC CYCLE "] + [""] * 10)
@@ -312,7 +317,9 @@ def process_excel_data(uploaded_file):
 
     autofit_table_columns(ws_marking, start_row=3, min_width=18)
 
+    # ----------------------------------------------------
     # 3. SHEET 'PVT'
+    # ----------------------------------------------------
     ws_pvt = wb.create_sheet(title="PVT")
     ws_pvt.append([])
     ws_pvt.append([])
@@ -358,7 +365,9 @@ def process_excel_data(uploaded_file):
         max_len = max(len(str(cell.value or '')) for cell in col)
         ws_pvt.column_dimensions[col_letter].width = max(max_len + 12, 30)
 
+    # ----------------------------------------------------
     # 4. SHEET 'Sheet3'
+    # ----------------------------------------------------
     ws_sheet3 = wb.create_sheet(title="Sheet3")
     ws_sheet3.append([])
     ws_sheet3.append([])
@@ -402,7 +411,6 @@ def process_excel_data(uploaded_file):
     output_stream.seek(0)
     
     return output_stream
-
 # ==========================================
 # 4. ANTARMUKA UTAMA (MAIN APP UI)
 # ==========================================
