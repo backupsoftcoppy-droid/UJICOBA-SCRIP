@@ -44,8 +44,24 @@ def extract_data_from_pdf(pdf_file):
         lt_match = re.search(r"\b(LT[A-Z0-9]{8,})\b", text)
         lt_num = lt_match.group(1) if lt_match else ""
 
-        dest_match = re.search(r":\s*([A-Za-z0-9\s-]+?\s*(?:DC|Hub))", text)
-        dest = dest_match.group(1).strip() if dest_match else ""
+        # Ekstraksi SC Destination (Tujuan) yang benar dari teks PDF
+        dest = ""
+        # Mencari pola "Destination:" atau "Tujuan:" atau mengambil nama DC selain SURABAYA DC
+        dest_match = re.search(
+            r"(?:Destination|Tujuan|Ke|DEST)\s*:\s*([A-Za-z0-9\s-]+?\s*(?:DC|Hub))",
+            text,
+            re.IGNORECASE,
+        )
+        if dest_match:
+            dest = dest_match.group(1).strip()
+        else:
+            # Mengambil daftar DC yang bukan SURABAYA DC
+            all_dcs = re.findall(r"\b([A-Za-z0-9\s-]+?\s*(?:DC|Hub))\b", text)
+            for d in all_dcs:
+                d_clean = d.strip()
+                if "SURABAYA" not in d_clean.upper():
+                    dest = d_clean
+                    break
 
         std_match = re.search(r"(\d{4}/\d{2}/\d{2})\s*\d{2}:\d{2}:\d{2}STD", text)
         if not std_match:
@@ -82,7 +98,6 @@ def extract_data_from_pdf(pdf_file):
             })
 
     return pd.DataFrame(extracted_rows)
-
 
 def apply_table_formatting(ws, start_row, max_col):
     """Memberikan border kotak hitam dan auto width kolom."""
