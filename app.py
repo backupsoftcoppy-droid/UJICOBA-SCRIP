@@ -3,6 +3,7 @@ import re
 
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 import pandas as pd
 import pypdf
 import streamlit as st
@@ -83,6 +84,42 @@ def extract_data_from_pdf(pdf_file):
     return pd.DataFrame(extracted_rows)
 
 
+def apply_table_formatting(ws, start_row, max_col):
+    """Memberikan border kotak hitam dan mengatur lebar kolom otomatis agar tidak terpotong."""
+    thin_border = Border(
+        left=Side(style="thin", color="000000"),
+        right=Side(style="thin", color="000000"),
+        top=Side(style="thin", color="000000"),
+        bottom=Side(style="thin", color="000000"),
+    )
+
+    # Apply Border & Font Bold pada Header
+    for col in range(1, max_col + 1):
+        cell = ws.cell(row=start_row, column=col)
+        cell.font = Font(bold=True, name="Calibri")
+
+    # Apply Border ke Seluruh Sel Tabel
+    for r in range(start_row, ws.max_row + 1):
+        for c in range(1, max_col + 1):
+            ws.cell(row=r, column=c).border = thin_border
+
+    # Auto-adjust column width
+    for col in ws.columns:
+        max_len = 0
+        col_letter = get_column_letter(col[0].column)
+        if col[0].column > max_col:
+            continue
+        for cell in col:
+            # Skip row 1 & 2 untuk perhitungan lebar kolom
+            if cell.row < start_row:
+                continue
+            if cell.value:
+                val_str = str(cell.value)
+                if len(val_str) > max_len:
+                    max_len = len(val_str)
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+
+
 uploaded_file = st.file_uploader("Upload File PDF SPX", type=["pdf"])
 
 if uploaded_file is not None:
@@ -91,7 +128,6 @@ if uploaded_file is not None:
     if not df.empty:
         st.success(f"Berhasil! Total **{len(df)}** TO ditemukan.")
 
-        # --- DATAFRAME LENGKAP PRESISI ---
         df_sjm = pd.DataFrame({
             "TGL": df["TGL"],
             "Vendor": "LION PARCEL",
@@ -150,7 +186,7 @@ if uploaded_file is not None:
             "Sum of Gross Weight",
         ]
 
-        # PREVIEW STREAMLIT WEB (LANGSUNG TABEL BERKOLOM KANAN-KIRI)
+        # --- PREVIEW ON WEB ---
         t1, t2, t3, t4 = st.tabs(
             ["📋 Sheet SJM", "🏷️ Sheet MARKING", "📑 Sheet PVT", "📊 Sheet3"]
         )
@@ -171,7 +207,7 @@ if uploaded_file is not None:
         with t4:
             st.dataframe(df_sheet3, use_container_width=True, hide_index=True)
 
-        # GENERATE EXCEL EXPLICIT STRUCTURE (ROW 1: TITLE, ROW 2: SUBTITLE, ROW 3: HEADERS, ROW 4+: DATA)
+        # --- GENERATE EXCEL WITH BORDERS & AUTO-WIDTH ---
         wb = openpyxl.Workbook()
 
         # 1. SHEET SJM
@@ -184,12 +220,13 @@ if uploaded_file is not None:
         ws_sjm.cell(row=2, column=9, value=len(df))
 
         for c_idx, col_name in enumerate(df_sjm.columns, 1):
-            cell = ws_sjm.cell(row=3, column=c_idx, value=col_name)
-            cell.font = Font(bold=True)
+            ws_sjm.cell(row=3, column=c_idx, value=col_name)
 
         for r_idx, row_val in enumerate(df_sjm.itertuples(index=False), 4):
             for c_idx, val in enumerate(row_val, 1):
                 ws_sjm.cell(row=r_idx, column=c_idx, value=val)
+
+        apply_table_formatting(ws_sjm, start_row=3, max_col=len(df_sjm.columns))
 
         # 2. SHEET MARKING
         ws_mk = wb.create_sheet(title="MARKING")
@@ -197,8 +234,7 @@ if uploaded_file is not None:
         ws_mk.cell(row=2, column=1, value="14 SEPTEMBER 2026 TRIP 2")
 
         for c_idx, col_name in enumerate(df_marking.columns, 1):
-            cell = ws_mk.cell(row=3, column=c_idx, value=col_name)
-            cell.font = Font(bold=True)
+            ws_mk.cell(row=3, column=c_idx, value=col_name)
 
         for r_idx, r in enumerate(df.itertuples(index=False), 4):
             ws_mk.cell(row=r_idx, column=1, value=r.TGL)
@@ -217,11 +253,14 @@ if uploaded_file is not None:
             )
             ws_mk.cell(row=r_idx, column=11, value=r._7)
 
+        apply_table_formatting(
+            ws_mk, start_row=3, max_col=len(df_marking.columns)
+        )
+
         # 3. SHEET PVT
         ws_pvt = wb.create_sheet(title="PVT")
         for c_idx, col_name in enumerate(df_pvt.columns, 1):
-            cell = ws_pvt.cell(row=3, column=c_idx, value=col_name)
-            cell.font = Font(bold=True)
+            ws_pvt.cell(row=3, column=c_idx, value=col_name)
 
         unique_indices = df.drop_duplicates(subset=["Sc Destination"]).index
         for p_idx, first_r in enumerate(unique_indices, 4):
@@ -237,15 +276,22 @@ if uploaded_file is not None:
                 value=f"=SUMIF(MARKING!J$4:J${len(df)+3}, A{p_idx}, MARKING!K$4:K${len(df)+3})",
             )
 
+        apply_table_formatting(
+            ws_pvt, start_row=3, max_col=len(df_pvt.columns)
+        )
+
         # 4. SHEET SHEET3
         ws_sum = wb.create_sheet(title="Sheet3")
         for c_idx, col_name in enumerate(df_sheet3.columns, 1):
-            cell = ws_sum.cell(row=3, column=c_idx, value=col_name)
-            cell.font = Font(bold=True)
+            ws_sum.cell(row=3, column=c_idx, value=col_name)
         for s_idx, r in enumerate(df_sheet3.itertuples(index=False), 4):
             ws_sum.cell(row=s_idx, column=1, value=r[0])
             ws_sum.cell(row=s_idx, column=2, value=r[1])
             ws_sum.cell(row=s_idx, column=3, value=r[2])
+
+        apply_table_formatting(
+            ws_sum, start_row=3, max_col=len(df_sheet3.columns)
+        )
 
         output = io.BytesIO()
         wb.save(output)
