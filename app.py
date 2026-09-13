@@ -239,13 +239,8 @@ if uploaded_file is not None:
         grey_fill = PatternFill(
             start_color="D9D9D9", end_color="D9D9D9", fill_type="solid"
         )
-        thin_border = Border(
-            left=Side(style="thin", color="000000"),
-            right=Side(style="thin", color="000000"),
-            top=Side(style="thin", color="000000"),
-            bottom=Side(style="thin", color="000000"),
-        )
 
+        # 1. SHEET SJM
         ws_sjm = wb.active
         ws_sjm.title = "SJM"
         ws_sjm.merge_cells("A1:H1")
@@ -271,11 +266,24 @@ if uploaded_file is not None:
             for c_idx, val in enumerate(row_val, 1):
                 ws_sjm.cell(row=r_idx, column=c_idx, value=val)
 
+        # Penambahan Baris Grand Total SJM
+        sjm_last_row = len(df) + 3
+        sjm_gt_row = sjm_last_row + 1
+        ws_sjm.cell(row=sjm_gt_row, column=1, value="Grand Total").font = Font(bold=True, name="Calibri")
+        ws_sjm.cell(row=sjm_gt_row, column=6, value=f"=COUNTA(F4:F{sjm_last_row})").font = Font(bold=True, name="Calibri")
+        ws_sjm.cell(row=sjm_gt_row, column=7, value=f"=SUM(G4:G{sjm_last_row})").font = Font(bold=True, name="Calibri")
+
         apply_table_formatting(ws_sjm, start_row=3, max_col=len(df_sjm.columns))
         for r in range(1, 3):
             for c in range(1, 10):
-                ws_sjm.cell(row=r, column=c).border = thin_border
+                ws_sjm.cell(row=r, column=c).border = Border(
+                    left=Side(style="thin", color="000000"),
+                    right=Side(style="thin", color="000000"),
+                    top=Side(style="thin", color="000000"),
+                    bottom=Side(style="thin", color="000000"),
+                )
 
+        # 2. SHEET MARKING
         ws_mk = wb.create_sheet(title="MARKING")
         ws_mk.merge_cells("A1:K1")
         cell_mk1 = ws_mk.cell(
@@ -286,7 +294,12 @@ if uploaded_file is not None:
         for c in range(1, 12):
             cell = ws_mk.cell(row=1, column=c)
             cell.fill = red_fill
-            cell.border = thin_border
+            cell.border = Border(
+                left=Side(style="thin", color="000000"),
+                right=Side(style="thin", color="000000"),
+                top=Side(style="thin", color="000000"),
+                bottom=Side(style="thin", color="000000"),
+            )
 
         ws_mk.merge_cells("A2:K2")
         cell_mk2 = ws_mk.cell(row=2, column=1, value="14 SEPTEMBER 2026 TRIP 2")
@@ -295,7 +308,12 @@ if uploaded_file is not None:
         for c in range(1, 12):
             cell = ws_mk.cell(row=2, column=c)
             cell.fill = yellow_fill
-            cell.border = thin_border
+            cell.border = Border(
+                left=Side(style="thin", color="000000"),
+                right=Side(style="thin", color="000000"),
+                top=Side(style="thin", color="000000"),
+                bottom=Side(style="thin", color="000000"),
+            )
 
         for c_idx, col_name in enumerate(df_marking.columns, 1):
             ws_mk.cell(row=3, column=c_idx, value=col_name)
@@ -317,16 +335,29 @@ if uploaded_file is not None:
             )
             ws_mk.cell(row=r_idx, column=11, value=r._7)
 
-        footer_row = len(df) + 4
+        # Footer / Grand Total Row MARKING
+        mk_last_row = len(df) + 3
+        footer_row = mk_last_row + 1
+        ws_mk.cell(row=footer_row, column=1, value="Grand Total").font = Font(bold=True, color="FFFFFF", name="Calibri")
+        ws_mk.cell(row=footer_row, column=6, value=f"=COUNTA(F4:F{mk_last_row})").font = Font(bold=True, color="FFFFFF", name="Calibri")
+        ws_mk.cell(row=footer_row, column=8, value=f"=SUM(H4:H{mk_last_row})").font = Font(bold=True, color="FFFFFF", name="Calibri")
+        ws_mk.cell(row=footer_row, column=11, value=f"=SUM(K4:K{mk_last_row})").font = Font(bold=True, color="FFFFFF", name="Calibri")
+
         for c in range(1, 12):
             cell = ws_mk.cell(row=footer_row, column=c)
             cell.fill = red_fill
-            cell.border = thin_border
+            cell.border = Border(
+                left=Side(style="thin", color="000000"),
+                right=Side(style="thin", color="000000"),
+                top=Side(style="thin", color="000000"),
+                bottom=Side(style="thin", color="000000"),
+            )
 
         apply_table_formatting(
             ws_mk, start_row=3, max_col=len(df_marking.columns)
         )
 
+        # 3. SHEET PVT
         ws_pvt = wb.create_sheet(title="PVT")
         for c_idx, col_name in enumerate(df_pvt.columns, 1):
             cell = ws_pvt.cell(row=1, column=c_idx, value=col_name)
@@ -369,6 +400,7 @@ if uploaded_file is not None:
             ws_pvt, start_row=1, max_col=len(df_pvt.columns)
         )
 
+        # 4. SHEET SHEET3
         ws_sum = wb.create_sheet(title="Sheet3")
 
         for c_idx, col_name in enumerate(df_sheet3.columns, 1):
@@ -422,4 +454,3 @@ if uploaded_file is not None:
             file_name=f"FIXED_SCRIPT_SJ_MANUAL_{uploaded_file.name.replace('.pdf', '')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
-        
