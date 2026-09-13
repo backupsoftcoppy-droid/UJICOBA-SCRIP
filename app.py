@@ -115,35 +115,40 @@ def extract_data_from_pdf(pdf_file):
             else "2026-09-14"
         )
 
-        to_numbers = re.findall(r"\b(TO\d{8}[A-Z0-9]+)\b", text)
-        weights = re.findall(r"\b(\d{1,3}\.\d{2,3})\b", text)
+        # Perbaikan ekstraksi baris agar TO & Gross Weight dipasangkan secara presisi
+        lines = text.split("\n")
+        for line in lines:
+            to_match = re.search(r"\b(TO\d{8}[A-Z0-9]+)\b", line)
+            if to_match:
+                to_num = to_match.group(1)
+                
+                # Cari pola berat (desimal) khusus yang berada di baris TO tersebut
+                weight_match = re.search(r"\b(\d{1,3}\.\d{2,3})\b", line)
+                gw = 0.0
+                if weight_match:
+                    try:
+                        gw = round(float(weight_match.group(1)), 3)
+                    except ValueError:
+                        gw = 0.0
 
-        for i, to_num in enumerate(to_numbers):
-            gw = 0.0
-            if i < len(weights):
-                try:
-                    gw = float(weights[i])
-                except ValueError:
-                    gw = 0.0
-
-            extracted_rows.append({
-                "TGL": tgl,
-                "Vendor": "Lion Parcel",
-                "Sc Origin": "SURABAYA DC",
-                "Sc Destination": dest,
-                "Lt Number": lt_num,
-                "To Number": to_num,
-                "Gross Weight": gw,
-                "Remarks": "BAG",
-            })
+                extracted_rows.append({
+                    "TGL": tgl,
+                    "Vendor": "Lion Parcel",
+                    "Sc Origin": "SURABAYA DC",
+                    "Sc Destination": dest,
+                    "Lt Number": lt_num,
+                    "To Number": to_num,
+                    "Gross Weight": gw,
+                    "Remarks": "BAG",
+                })
 
     df_extracted = pd.DataFrame(extracted_rows)
 
     if not df_extracted.empty:
-        # 1. Urutan data sesuai PDF
+        # Urutan sesuai urutan dokumen PDF (dibalik)
         df_extracted = df_extracted.iloc[::-1].reset_index(drop=True)
 
-        # 2. Marking dinamis
+        # Marking dinamis per 15 items
         marking_list = []
         dest_counters = {}
 
@@ -175,7 +180,8 @@ if uploaded_file is not None:
 
     if not df.empty:
         total_rows = len(df)
-        st.success(f"Berhasil! Total **{total_rows}** TO ditemukan.")
+        total_gw = round(df["Gross Weight"].sum(), 3)
+        st.success(f"Berhasil! Total **{total_rows}** TO ditemukan | Total GW: **{total_gw}** kg")
 
         df_sjm = pd.DataFrame({
             "TGL": df["TGL"],
@@ -385,7 +391,7 @@ if uploaded_file is not None:
             ws_mk, start_row=3, max_col=len(df_marking.columns)
         )
 
-        # 3. SHEET PVT (Dinamis & Presisi)
+        # 3. SHEET PVT
         ws_pvt = wb.create_sheet(title="PVT")
         for c_idx, col_name in enumerate(df_pvt.columns, 1):
             cell = ws_pvt.cell(row=1, column=c_idx, value=col_name)
@@ -415,7 +421,7 @@ if uploaded_file is not None:
             ws_pvt, start_row=1, max_col=len(df_pvt.columns)
         )
 
-        # 4. SHEET SHEET3 (Dinamis & Presisi)
+        # 4. SHEET SHEET3
         ws_sum = wb.create_sheet(title="Sheet3")
         for c_idx, col_name in enumerate(df_sheet3.columns, 1):
             cell = ws_sum.cell(row=1, column=c_idx, value=col_name)
@@ -453,6 +459,6 @@ if uploaded_file is not None:
         st.download_button(
             label="📥 Download File Excel SJM & Marking",
             data=output,
-            file_name=f"FIXED_FINAL_SJ_MANUAL_{uploaded_file.name.replace('.pdf', '')}.xlsx",
+            file_name=f"ACCURATE_SJ_MANUAL_{uploaded_file.name.replace('.pdf', '')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
