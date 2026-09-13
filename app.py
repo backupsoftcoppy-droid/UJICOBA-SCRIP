@@ -70,7 +70,7 @@ def apply_table_formatting(ws, start_row, max_col):
         for cell in col:
             if cell.row < start_row:
                 continue
-            if cell.value:
+            if cell.value is not None:
                 val_str = str(cell.value)
                 if len(val_str) > max_len:
                     max_len = len(val_str)
@@ -140,10 +140,10 @@ def extract_data_from_pdf(pdf_file):
     df_extracted = pd.DataFrame(extracted_rows)
 
     if not df_extracted.empty:
-        # 1. Balik urutan data (paling bawah di PDF jadi paling atas)
+        # 1. Urutan data sesuai PDF
         df_extracted = df_extracted.iloc[::-1].reset_index(drop=True)
 
-        # 2. Marking dinamis bertambah +1 tiap 15 items per destinasi
+        # 2. Marking dinamis
         marking_list = []
         dest_counters = {}
 
@@ -174,7 +174,8 @@ if uploaded_file is not None:
     df = extract_data_from_pdf(uploaded_file)
 
     if not df.empty:
-        st.success(f"Berhasil! Total **{len(df)}** TO ditemukan.")
+        total_rows = len(df)
+        st.success(f"Berhasil! Total **{total_rows}** TO ditemukan.")
 
         df_sjm = pd.DataFrame({
             "TGL": df["TGL"],
@@ -206,12 +207,12 @@ if uploaded_file is not None:
             "Clear Gw": df["Gross Weight"],
         })
 
-        # Aggregation PVT berdasarkan External Number unik
+        # Aggregation PVT
         df_pvt = (
             df_marking.groupby("External Number", sort=False)
             .agg(
                 Count_of_External_Number=("To Number", "count"),
-                Sum_of_Clear_Gw=("Clear Gw", "sum"),
+                Sum_of_Clear_Gw=("Clear Gw", lambda x: round(x.sum(), 3)),
             )
             .reset_index()
         )
@@ -221,11 +222,12 @@ if uploaded_file is not None:
             "Sum of Clear Gw",
         ]
 
+        # Aggregation Sheet3
         df_sheet3 = (
             df.groupby("Sc Destination", sort=False)
             .agg(
                 Count_of_To_Number=("To Number", "count"),
-                Sum_of_Gross_Weight=("Gross Weight", "sum"),
+                Sum_of_Gross_Weight=("Gross Weight", lambda x: round(x.sum(), 3)),
             )
             .reset_index()
         )
@@ -287,7 +289,7 @@ if uploaded_file is not None:
         cell_r2.font = Font(bold=True, size=11, name="Calibri")
         cell_r2.alignment = Alignment(horizontal="center", vertical="center")
 
-        total_cell = ws_sjm.cell(row=2, column=9, value=len(df))
+        total_cell = ws_sjm.cell(row=2, column=9, value=total_rows)
         total_cell.font = Font(bold=True, size=11, name="Calibri")
         total_cell.alignment = Alignment(horizontal="center", vertical="center")
 
@@ -298,8 +300,8 @@ if uploaded_file is not None:
             for c_idx, val in enumerate(row_val, 1):
                 ws_sjm.cell(row=r_idx, column=c_idx, value=val)
 
-        # GRAND TOTAL SJM
-        sjm_last_row = len(df) + 3
+        # Grand Total SJM
+        sjm_last_row = total_rows + 3
         sjm_gt_row = sjm_last_row + 1
         ws_sjm.merge_cells(
             start_row=sjm_gt_row, start_column=1, end_row=sjm_gt_row, end_column=6
@@ -348,25 +350,12 @@ if uploaded_file is not None:
         for c_idx, col_name in enumerate(df_marking.columns, 1):
             ws_mk.cell(row=3, column=c_idx, value=col_name)
 
-        for r_idx, r in enumerate(df.itertuples(index=False), 4):
-            ws_mk.cell(row=r_idx, column=1, value=r[0])
-            ws_mk.cell(row=r_idx, column=2, value=r[1])
-            ws_mk.cell(row=r_idx, column=3, value=r[2])
-            ws_mk.cell(row=r_idx, column=4, value=r[3])
-            ws_mk.cell(row=r_idx, column=5, value=r[4])
-            ws_mk.cell(row=r_idx, column=6, value=r[5])
-            ws_mk.cell(row=r_idx, column=7, value=r[8])
-            ws_mk.cell(row=r_idx, column=8, value=r[6])
-            ws_mk.cell(row=r_idx, column=9, value=r[7])
-            ws_mk.cell(
-                row=r_idx,
-                column=10,
-                value=f'=G{r_idx}&"/"&E{r_idx}&"/"&I{r_idx}',
-            )
-            ws_mk.cell(row=r_idx, column=11, value=r[6])
+        for r_idx, r in enumerate(df_marking.itertuples(index=False), 4):
+            for c_idx, val in enumerate(r, 1):
+                ws_mk.cell(row=r_idx, column=c_idx, value=val)
 
-        # GRAND TOTAL MARKING
-        mk_last_row = len(df) + 3
+        # Grand Total Marking
+        mk_last_row = total_rows + 3
         footer_row = mk_last_row + 1
         ws_mk.merge_cells(
             start_row=footer_row, start_column=1, end_row=footer_row, end_column=7
@@ -396,29 +385,20 @@ if uploaded_file is not None:
             ws_mk, start_row=3, max_col=len(df_marking.columns)
         )
 
-        # 3. SHEET PVT (DIBERBAIKI: Menggunakan seluruh External Number Unik)
+        # 3. SHEET PVT (Dinamis & Presisi)
         ws_pvt = wb.create_sheet(title="PVT")
         for c_idx, col_name in enumerate(df_pvt.columns, 1):
             cell = ws_pvt.cell(row=1, column=c_idx, value=col_name)
             cell.fill = grey_fill
 
-        unique_ext_numbers = df_marking["External Number"].unique()
-        last_pvt_row = 1
-        for p_idx, ext_num in enumerate(unique_ext_numbers, 2):
-            ws_pvt.cell(row=p_idx, column=1, value=ext_num)
-            ws_pvt.cell(
-                row=p_idx,
-                column=2,
-                value=f"=COUNTIF(MARKING!J$4:J${len(df)+3}, A{p_idx})",
-            )
-            ws_pvt.cell(
-                row=p_idx,
-                column=3,
-                value=f"=SUMIF(MARKING!J$4:J${len(df)+3}, A{p_idx}, MARKING!K$4:K${len(df)+3})",
-            )
-            last_pvt_row = p_idx
+        for p_idx, r in enumerate(df_pvt.itertuples(index=False), 2):
+            ws_pvt.cell(row=p_idx, column=1, value=r[0])
+            ws_pvt.cell(row=p_idx, column=2, value=r[1])
+            ws_pvt.cell(row=p_idx, column=3, value=r[2])
 
+        last_pvt_row = len(df_pvt) + 1
         gt_row = last_pvt_row + 1
+
         gt_cell1 = ws_pvt.cell(row=gt_row, column=1, value="Grand Total")
         gt_cell2 = ws_pvt.cell(
             row=gt_row, column=2, value=f"=SUM(B2:B{last_pvt_row})"
@@ -427,42 +407,28 @@ if uploaded_file is not None:
             row=gt_row, column=3, value=f"=SUM(C2:C{last_pvt_row})"
         )
 
-        gt_cell1.font = Font(bold=True, name="Calibri")
-        gt_cell2.font = Font(bold=True, name="Calibri")
-        gt_cell3.font = Font(bold=True, name="Calibri")
-
-        gt_cell1.fill = grey_fill
-        gt_cell2.fill = grey_fill
-        gt_cell3.fill = grey_fill
+        for cell in (gt_cell1, gt_cell2, gt_cell3):
+            cell.font = Font(bold=True, name="Calibri")
+            cell.fill = grey_fill
 
         apply_table_formatting(
             ws_pvt, start_row=1, max_col=len(df_pvt.columns)
         )
 
-        # 4. SHEET SHEET3
+        # 4. SHEET SHEET3 (Dinamis & Presisi)
         ws_sum = wb.create_sheet(title="Sheet3")
-
         for c_idx, col_name in enumerate(df_sheet3.columns, 1):
             cell = ws_sum.cell(row=1, column=c_idx, value=col_name)
             cell.fill = grey_fill
 
-        unique_dests = df["Sc Destination"].unique()
-        last_s3_row = 1
-        for s_idx, dest_name in enumerate(unique_dests, 2):
-            ws_sum.cell(row=s_idx, column=1, value=dest_name)
-            ws_sum.cell(
-                row=s_idx,
-                column=2,
-                value=f"=COUNTIF(MARKING!D$4:D${len(df)+3}, A{s_idx})",
-            )
-            ws_sum.cell(
-                row=s_idx,
-                column=3,
-                value=f"=SUMIF(MARKING!D$4:D${len(df)+3}, A{s_idx}, MARKING!H$4:H${len(df)+3})",
-            )
-            last_s3_row = s_idx
+        for s_idx, r in enumerate(df_sheet3.itertuples(index=False), 2):
+            ws_sum.cell(row=s_idx, column=1, value=r[0])
+            ws_sum.cell(row=s_idx, column=2, value=r[1])
+            ws_sum.cell(row=s_idx, column=3, value=r[2])
 
+        last_s3_row = len(df_sheet3) + 1
         s3_gt_row = last_s3_row + 1
+
         s3_gt1 = ws_sum.cell(row=s3_gt_row, column=1, value="Grand Total")
         s3_gt2 = ws_sum.cell(
             row=s3_gt_row, column=2, value=f"=SUM(B2:B{last_s3_row})"
@@ -471,18 +437,15 @@ if uploaded_file is not None:
             row=s3_gt_row, column=3, value=f"=SUM(C2:C{last_s3_row})"
         )
 
-        s3_gt1.font = Font(bold=True, name="Calibri")
-        s3_gt2.font = Font(bold=True, name="Calibri")
-        s3_gt3.font = Font(bold=True, name="Calibri")
-
-        s3_gt1.fill = grey_fill
-        s3_gt2.fill = grey_fill
-        s3_gt3.fill = grey_fill
+        for cell in (s3_gt1, s3_gt2, s3_gt3):
+            cell.font = Font(bold=True, name="Calibri")
+            cell.fill = grey_fill
 
         apply_table_formatting(
             ws_sum, start_row=1, max_col=len(df_sheet3.columns)
         )
 
+        # Export Excel
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
@@ -490,7 +453,6 @@ if uploaded_file is not None:
         st.download_button(
             label="📥 Download File Excel SJM & Marking",
             data=output,
-            file_name=f"FIXED_SCRIPT_SJ_MANUAL_{uploaded_file.name.replace('.pdf', '')}.xlsx",
+            file_name=f"FIXED_FINAL_SJ_MANUAL_{uploaded_file.name.replace('.pdf', '')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
-        
