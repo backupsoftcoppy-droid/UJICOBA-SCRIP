@@ -5,7 +5,7 @@ import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 import pandas as pd
-import pypdf
+import pdfplumber
 import streamlit as st
 
 st.set_page_config(
@@ -78,83 +78,81 @@ def apply_table_formatting(ws, start_row, max_col):
 
 
 def extract_data_from_pdf(pdf_file):
-    reader = pypdf.PdfReader(pdf_file)
     extracted_rows = []
     valid_destinations = list(MARKING_MAP.keys())
 
-    for page in reader.pages:
-        text = page.extract_text()
-        if not text:
-            continue
+    with pdfplumber.open(pdf_file) as pdf:
+        for page in pdf.pages:
+            text = page.extract_text()
+            if not text:
+                continue
 
-        lt_match = re.search(r"\b(LT[A-Z0-9]{8,})\b", text)
-        lt_num = lt_match.group(1) if lt_match else ""
+            lt_match = re.search(r"\b(LT[A-Z0-9]{8,})\b", text)
+            lt_num = lt_match.group(1) if lt_match else ""
 
-        dest = ""
-        for valid_dest in valid_destinations:
-            if valid_dest in text and valid_dest != "SURABAYA DC":
-                dest = valid_dest
-                break
-
-        if not dest:
-            all_dcs = re.findall(
-                r"\b([A-Za-z0-9\s-]+?\s*(?:DC|Hub))\b", text, re.IGNORECASE
-            )
-            for d in all_dcs:
-                d_clean = d.strip()
-                if "SURABAYA" not in d_clean.upper():
-                    dest = d_clean
+            dest = ""
+            for valid_dest in valid_destinations:
+                if valid_dest in text and valid_dest != "SURABAYA DC":
+                    dest = valid_dest
                     break
 
-        std_match = re.search(r"(\d{4}/\d{2}/\d{2})\s*\d{2}:\d{2}:\d{2}STD", text)
-        if not std_match:
-            std_match = re.search(r":\s*(\d{4}/\d{2}/\d{2})", text)
-        tgl = (
-            std_match.group(1).replace("/", "-")
-            if std_match
-            else "2026-09-14"
-        )
+            if not dest:
+                all_dcs = re.findall(
+                    r"\b([A-Za-z0-9\s-]+?\s*(?:DC|Hub))\b", text, re.IGNORECASE
+                )
+                for d in all_dcs:
+                    d_clean = d.strip()
+                    if "SURABAYA" not in d_clean.upper():
+                        dest = d_clean
+                        break
 
-        # Pemisahan teks berbasis baris untuk mencocokkan TO dan Berat
-        lines = [line.strip() for line in text.split("\n") if line.strip()]
-        
-        for line in lines:
-            to_match = re.search(r"\b(TO\d{8}[A-Z0-9]+)\b", line)
-            if to_match:
-                to_num = to_match.group(1)
-                
-                # Ekstrak semua angka desimal dalam baris tersebut
-                # Mengabaikan tanggal/jam (misal 2026/09/14 atau 14:20:00)
-                clean_line = re.sub(r"\d{4}/\d{2}/\d{2}", "", line)
-                clean_line = re.sub(r"\d{2}:\d{2}:\d{2}", "", clean_line)
-                
-                weights = re.findall(r"\b(\d{1,3}\.\d{1,3})\b", clean_line)
-                
-                gw = 0.0
-                if weights:
-                    try:
-                        gw = round(float(weights[0]), 3)
-                    except ValueError:
-                        gw = 0.0
+            std_match = re.search(r"(\d{4}/\d{2}/\d{2})\s*\d{2}:\d{2}:\d{2}STD", text)
+            if not std_match:
+                std_match = re.search(r":\s*(\d{4}/\d{2}/\d{2})", text)
+            tgl = (
+                std_match.group(1).replace("/", "-")
+                if std_match
+                else "2026-09-14"
+            )
 
-                extracted_rows.append({
-                    "TGL": tgl,
-                    "Vendor": "Lion Parcel",
-                    "Sc Origin": "SURABAYA DC",
-                    "Sc Destination": dest,
-                    "Lt Number": lt_num,
-                    "To Number": to_num,
-                    "Gross Weight": gw,
-                    "Remarks": "BAG",
-                })
+            lines = text.split("\n")
+            for line in lines:
+                to_match = re.search(r"\b(TO\d{8}[A-Z0-9]+)\b", line)
+                if to_match:
+                    to_num = to_match.group(1)
+
+                    # Hapus pola tanggal/waktu agar angka tanggal tidak salah terdeteksi berat
+                    clean_line = re.sub(r"\d{4}/\d{2}/\d{2}", "", line)
+                    clean_line = re.sub(r"\d{2}:\d{2}:\d{2}", "", clean_line)
+
+                    # Menangkap angka desimal (titik maupun koma)
+                    weights = re.findall(r"\b(\d{1,3}[\.,]\d{1,3})\b", clean_line)
+
+                    gw = 0.0
+                    if weights:
+                        try:
+                            # Ubah koma menjadi titik untuk konversi float
+                            val_str = weights[0].replace(",", ".")
+                            gw = round(float(val_str), 3)
+                        except ValueError:
+                            gw = 0.0
+
+                    extracted_rows.append({
+                        "TGL": tgl,
+                        "Vendor": "Lion Parcel",
+                        "Sc Origin": "SURABAYA DC",
+                        "Sc Destination": dest,
+                        "Lt Number": lt_num,
+                        "To Number": to_num,
+                        "Gross Weight": gw,
+                        "Remarks": "BAG",
+                    })
 
     df_extracted = pd.DataFrame(extracted_rows)
 
     if not df_extracted.empty:
-        # Urutan balik sesuai tampilan PDF asli
         df_extracted = df_extracted.iloc[::-1].reset_index(drop=True)
 
-        # Marking dinamis per 15 items
         marking_list = []
         dest_counters = {}
 
