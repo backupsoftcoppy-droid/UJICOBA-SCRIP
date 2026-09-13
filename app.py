@@ -2,7 +2,7 @@ import io
 import re
 
 import openpyxl
-from openpyxl.styles import Font
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 import pandas as pd
 import pypdf
 import streamlit as st
@@ -91,9 +91,7 @@ if uploaded_file is not None:
     if not df.empty:
         st.success(f"Berhasil! Total **{len(df)}** TO ditemukan.")
 
-        # --- PREPARE DATAFRAMES WITH EXACT COLUMNS FOR DISPLAY ---
-
-        # 1. Sheet SJM Table
+        # --- DATAFRAME LENGKAP PRESISI ---
         df_sjm = pd.DataFrame({
             "TGL": df["TGL"],
             "Vendor": "LION PARCEL",
@@ -106,7 +104,6 @@ if uploaded_file is not None:
             "TOTAL": "",
         })
 
-        # 2. Sheet MARKING Table
         df_marking = pd.DataFrame({
             "Tanggal": df["TGL"],
             "Vendor": df["Vendor"],
@@ -125,7 +122,6 @@ if uploaded_file is not None:
             "Clear Gw": df["Gross Weight"],
         })
 
-        # 3. Sheet PVT Table
         df_pvt = (
             df_marking.groupby("External Number")
             .agg(
@@ -140,7 +136,6 @@ if uploaded_file is not None:
             "Sum of Clear Gw",
         ]
 
-        # 4. Sheet3 Table
         df_sheet3 = (
             df.groupby("Sc Destination")
             .agg(
@@ -155,50 +150,56 @@ if uploaded_file is not None:
             "Sum of Gross Weight",
         ]
 
-        # --- PREVIEW TABS ON WEB ---
+        # PREVIEW STREAMLIT WEB (LANGSUNG TABEL BERKOLOM KANAN-KIRI)
         t1, t2, t3, t4 = st.tabs(
             ["📋 Sheet SJM", "🏷️ Sheet MARKING", "📑 Sheet PVT", "📊 Sheet3"]
         )
 
         with t1:
-            st.caption("SURAT JALAN MANUAL SURABAYA DC VIA LION STD")
-            st.dataframe(df_sjm, use_container_width=True)
+            st.markdown(
+                "**SURAT JALAN MANUAL SURABAYA DC VIA LION STD | 14 SEPTEMBER 2026 TRIP 2**"
+            )
+            st.dataframe(df_sjm, use_container_width=True, hide_index=True)
 
         with t2:
-            st.caption("MARKING SPX OSO SUB DC CYCLE")
-            st.dataframe(df_marking, use_container_width=True)
+            st.markdown("**MARKING SPX OSO SUB DC CYCLE | 14 SEPTEMBER 2026 TRIP 2**")
+            st.dataframe(df_marking, use_container_width=True, hide_index=True)
 
         with t3:
-            st.dataframe(df_pvt, use_container_width=True)
+            st.dataframe(df_pvt, use_container_width=True, hide_index=True)
 
         with t4:
-            st.dataframe(df_sheet3, use_container_width=True)
+            st.dataframe(df_sheet3, use_container_width=True, hide_index=True)
 
-        # --- GENERATE EXCEL WITH EXACT FORMULAS & HEADERS ---
+        # GENERATE EXCEL EXPLICIT STRUCTURE (ROW 1: TITLE, ROW 2: SUBTITLE, ROW 3: HEADERS, ROW 4+: DATA)
         wb = openpyxl.Workbook()
 
-        # WS 1: SJM
+        # 1. SHEET SJM
         ws_sjm = wb.active
         ws_sjm.title = "SJM"
         ws_sjm.cell(
             row=1, column=1, value="SURAT JALAN MANUAL SURABAYA DC VIA LION STD"
         )
         ws_sjm.cell(row=2, column=1, value="14 SEPTEMBER 2026 TRIP 2")
-        ws_sjm.cell(row=2, column=9, value=f"=COUNTA(F4:F{len(df)+3})")
-        for col_idx, col_name in enumerate(df_sjm.columns, 1):
-            c = ws_sjm.cell(row=3, column=col_idx, value=col_name)
-            c.font = Font(bold=True)
-        for r_idx, r in enumerate(df_sjm.itertuples(index=False), 4):
-            for c_idx, val in enumerate(r, 1):
+        ws_sjm.cell(row=2, column=9, value=len(df))
+
+        for c_idx, col_name in enumerate(df_sjm.columns, 1):
+            cell = ws_sjm.cell(row=3, column=c_idx, value=col_name)
+            cell.font = Font(bold=True)
+
+        for r_idx, row_val in enumerate(df_sjm.itertuples(index=False), 4):
+            for c_idx, val in enumerate(row_val, 1):
                 ws_sjm.cell(row=r_idx, column=c_idx, value=val)
 
-        # WS 2: MARKING
+        # 2. SHEET MARKING
         ws_mk = wb.create_sheet(title="MARKING")
         ws_mk.cell(row=1, column=1, value="MARKING SPX OSO SUB DC CYCLE ")
         ws_mk.cell(row=2, column=1, value="14 SEPTEMBER 2026 TRIP 2")
-        for col_idx, col_name in enumerate(df_marking.columns, 1):
-            c = ws_mk.cell(row=3, column=col_idx, value=col_name)
-            c.font = Font(bold=True)
+
+        for c_idx, col_name in enumerate(df_marking.columns, 1):
+            cell = ws_mk.cell(row=3, column=c_idx, value=col_name)
+            cell.font = Font(bold=True)
+
         for r_idx, r in enumerate(df.itertuples(index=False), 4):
             ws_mk.cell(row=r_idx, column=1, value=r.TGL)
             ws_mk.cell(row=r_idx, column=2, value=r.Vendor)
@@ -216,11 +217,11 @@ if uploaded_file is not None:
             )
             ws_mk.cell(row=r_idx, column=11, value=r._7)
 
-        # WS 3: PVT
+        # 3. SHEET PVT
         ws_pvt = wb.create_sheet(title="PVT")
-        for col_idx, col_name in enumerate(df_pvt.columns, 1):
-            c = ws_pvt.cell(row=3, column=col_idx, value=col_name)
-            c.font = Font(bold=True)
+        for c_idx, col_name in enumerate(df_pvt.columns, 1):
+            cell = ws_pvt.cell(row=3, column=c_idx, value=col_name)
+            cell.font = Font(bold=True)
 
         unique_indices = df.drop_duplicates(subset=["Sc Destination"]).index
         for p_idx, first_r in enumerate(unique_indices, 4):
@@ -236,11 +237,11 @@ if uploaded_file is not None:
                 value=f"=SUMIF(MARKING!J$4:J${len(df)+3}, A{p_idx}, MARKING!K$4:K${len(df)+3})",
             )
 
-        # WS 4: Sheet3
+        # 4. SHEET SHEET3
         ws_sum = wb.create_sheet(title="Sheet3")
-        for col_idx, col_name in enumerate(df_sheet3.columns, 1):
-            c = ws_sum.cell(row=3, column=col_idx, value=col_name)
-            c.font = Font(bold=True)
+        for c_idx, col_name in enumerate(df_sheet3.columns, 1):
+            cell = ws_sum.cell(row=3, column=c_idx, value=col_name)
+            cell.font = Font(bold=True)
         for s_idx, r in enumerate(df_sheet3.itertuples(index=False), 4):
             ws_sum.cell(row=s_idx, column=1, value=r[0])
             ws_sum.cell(row=s_idx, column=2, value=r[1])
