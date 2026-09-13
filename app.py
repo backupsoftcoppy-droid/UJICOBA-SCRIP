@@ -36,6 +36,9 @@ def extract_data_from_pdf(pdf_file):
     reader = pypdf.PdfReader(pdf_file)
     extracted_rows = []
 
+    # Daftar nama DC valid yang ada di MARKING_MAP
+    valid_destinations = list(MARKING_MAP.keys())
+
     for page in reader.pages:
         text = page.extract_text()
         if not text:
@@ -45,19 +48,17 @@ def extract_data_from_pdf(pdf_file):
         lt_match = re.search(r"\b(LT[A-Z0-9]{8,})\b", text)
         lt_num = lt_match.group(1) if lt_match else ""
 
-        # 2. Ekstraksi Sc Destination (Tujuan Spesifik)
+        # 2. Ekstraksi Destination (Pilih yang cocok dengan MARKING_MAP & BUKAN Surabaya DC)
         dest = ""
-        # Mencari teks yang persis berada di sebelah label Destination / SC Destination / Tujuan
-        dest_match = re.search(
-            r"(?:SC\s*Destination|Destination|Tujuan)\s*:\s*([A-Za-z0-9\s-]+?\s*(?:DC|Hub))",
-            text,
-            re.IGNORECASE,
-        )
 
-        if dest_match:
-            dest = dest_match.group(1).strip()
-        else:
-            # Jika tidak ada label explicit, ambil nama DC yang BUKAN SURABAYA DC
+        # Langkah A: Cari nama DC dari daftar valid yang ada di dalam teks halaman PDF
+        for valid_dest in valid_destinations:
+            if valid_dest in text and valid_dest != "SURABAYA DC":
+                dest = valid_dest
+                break
+
+        # Langkah B: Jika tidak ditemukan di daftar, cari kata berakhiran "DC" / "Hub" yang bukan SURABAYA
+        if not dest:
             all_dcs = re.findall(
                 r"\b([A-Za-z0-9\s-]+?\s*(?:DC|Hub))\b", text, re.IGNORECASE
             )
@@ -77,7 +78,7 @@ def extract_data_from_pdf(pdf_file):
             else "2026-09-14"
         )
 
-        # 4. Ekstraksi TO Numbers & Gross Weight
+        # 4. Ekstraksi TO Numbers & Weight
         to_numbers = re.findall(r"\b(TO\d{8}[A-Z0-9]+)\b", text)
         weights = re.findall(r"\b(\d{1,3}\.\d{2,3})\b", text)
 
@@ -104,7 +105,8 @@ def extract_data_from_pdf(pdf_file):
             })
 
     return pd.DataFrame(extracted_rows)
-def apply_table_formatting(ws, start_row, max_col):
+    
+    def apply_table_formatting(ws, start_row, max_col):
     """Memberikan border kotak hitam dan auto width kolom."""
     thin_border = Border(
         left=Side(style="thin", color="000000"),
