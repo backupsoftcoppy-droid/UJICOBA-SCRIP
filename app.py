@@ -121,7 +121,7 @@ def apply_table_formatting(ws, start_row, max_col):
                 val_str = str(cell.value)
                 if len(val_str) > max_len:
                     max_len = len(val_str)
-        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 15)
 
 
 uploaded_file = st.file_uploader("Upload File PDF SPX", type=["pdf"])
@@ -219,6 +219,9 @@ if uploaded_file is not None:
         yellow_fill = PatternFill(
             start_color="FFFF00", end_color="FFFF00", fill_type="solid"
         )
+        grey_fill = PatternFill(
+            start_color="D9D9D9", end_color="D9D9D9", fill_type="solid"
+        )
         thin_border = Border(
             left=Side(style="thin", color="000000"),
             right=Side(style="thin", color="000000"),
@@ -257,10 +260,8 @@ if uploaded_file is not None:
             for c in range(1, 10):
                 ws_sjm.cell(row=r, column=c).border = thin_border
 
-        # 2. SHEET MARKING (PENGATURAN MERAH-KUNING SESUAI FOTO)
+        # 2. SHEET MARKING
         ws_mk = wb.create_sheet(title="MARKING")
-
-        # Row 1: Merah + Teks Kuning
         ws_mk.merge_cells("A1:K1")
         cell_mk1 = ws_mk.cell(
             row=1, column=1, value="MARKING SPX OSO SUB DC CYCLE"
@@ -272,7 +273,6 @@ if uploaded_file is not None:
             cell.fill = red_fill
             cell.border = thin_border
 
-        # Row 2: Kuning + Teks Merah
         ws_mk.merge_cells("A2:K2")
         cell_mk2 = ws_mk.cell(row=2, column=1, value="14 SEPTEMBER 2026 TRIP 2")
         cell_mk2.font = Font(bold=True, color="FF0000", name="Calibri", size=10)
@@ -282,11 +282,9 @@ if uploaded_file is not None:
             cell.fill = yellow_fill
             cell.border = thin_border
 
-        # Row 3 Header
         for c_idx, col_name in enumerate(df_marking.columns, 1):
             ws_mk.cell(row=3, column=c_idx, value=col_name)
 
-        # Data Rows & Formula
         for r_idx, r in enumerate(df.itertuples(index=False), 4):
             ws_mk.cell(row=r_idx, column=1, value=r.TGL)
             ws_mk.cell(row=r_idx, column=2, value=r.Vendor)
@@ -304,7 +302,6 @@ if uploaded_file is not None:
             )
             ws_mk.cell(row=r_idx, column=11, value=r._7)
 
-        # Baris Footer Merah di bawah (Summary Row)
         footer_row = len(df) + 4
         for c in range(1, 12):
             cell = ws_mk.cell(row=footer_row, column=c)
@@ -315,13 +312,18 @@ if uploaded_file is not None:
             ws_mk, start_row=3, max_col=len(df_marking.columns)
         )
 
-        # 3. SHEET PVT
+        # 3. SHEET PVT (PERSIS SESUAI TAMPILAN GAMBAR PVT BARU)
         ws_pvt = wb.create_sheet(title="PVT")
-        for c_idx, col_name in enumerate(df_pvt.columns, 1):
-            ws_pvt.cell(row=3, column=c_idx, value=col_name)
 
+        # Header Row 1 dengan Background Abu-Abu Muda
+        for c_idx, col_name in enumerate(df_pvt.columns, 1):
+            cell = ws_pvt.cell(row=1, column=c_idx, value=col_name)
+            cell.fill = grey_fill
+
+        # Data Rows (Mulai Row 2)
         unique_indices = df.drop_duplicates(subset=["Sc Destination"]).index
-        for p_idx, first_r in enumerate(unique_indices, 4):
+        last_pvt_row = 1
+        for p_idx, first_r in enumerate(unique_indices, 2):
             ws_pvt.cell(row=p_idx, column=1, value=f"=MARKING!J{first_r+4}")
             ws_pvt.cell(
                 row=p_idx,
@@ -333,9 +335,28 @@ if uploaded_file is not None:
                 column=3,
                 value=f"=SUMIF(MARKING!J$4:J${len(df)+3}, A{p_idx}, MARKING!K$4:K${len(df)+3})",
             )
+            last_pvt_row = p_idx
+
+        # Grand Total Row (Paling Bawah)
+        gt_row = last_pvt_row + 1
+        gt_cell1 = ws_pvt.cell(row=gt_row, column=1, value="Grand Total")
+        gt_cell2 = ws_pvt.cell(
+            row=gt_row, column=2, value=f"=SUM(B2:B{last_pvt_row})"
+        )
+        gt_cell3 = ws_pvt.cell(
+            row=gt_row, column=3, value=f"=SUM(C2:C{last_pvt_row})"
+        )
+
+        gt_cell1.font = Font(bold=True, name="Calibri")
+        gt_cell2.font = Font(bold=True, name="Calibri")
+        gt_cell3.font = Font(bold=True, name="Calibri")
+
+        gt_cell1.fill = grey_fill
+        gt_cell2.fill = grey_fill
+        gt_cell3.fill = grey_fill
 
         apply_table_formatting(
-            ws_pvt, start_row=3, max_col=len(df_pvt.columns)
+            ws_pvt, start_row=1, max_col=len(df_pvt.columns)
         )
 
         # 4. SHEET SHEET3
