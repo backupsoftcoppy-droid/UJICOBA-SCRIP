@@ -71,7 +71,7 @@ def extract_data_from_pdf(pdf_file):
 
             extracted_rows.append({
                 "TGL": tgl,
-                "Vendor": "Lion Parcel",
+                "Vendor": "LION PARCEL",
                 "Sc Origin": "SURABAYA DC",
                 "Sc Destination": dest,
                 "Lt Number": lt_num,
@@ -85,7 +85,7 @@ def extract_data_from_pdf(pdf_file):
 
 
 def apply_table_formatting(ws, start_row, max_col):
-    """Memberikan border kotak hitam dan mengatur lebar kolom otomatis agar tidak terpotong."""
+    """Memberikan border kotak hitam dan mengatur lebar kolom otomatis."""
     thin_border = Border(
         left=Side(style="thin", color="000000"),
         right=Side(style="thin", color="000000"),
@@ -93,15 +93,23 @@ def apply_table_formatting(ws, start_row, max_col):
         bottom=Side(style="thin", color="000000"),
     )
 
-    # Apply Border & Font Bold pada Header
+    # Format Header (Bold & Center)
     for col in range(1, max_col + 1):
         cell = ws.cell(row=start_row, column=col)
         cell.font = Font(bold=True, name="Calibri")
+        cell.alignment = Alignment(
+            horizontal="center", vertical="center", wrap_text=True
+        )
 
-    # Apply Border ke Seluruh Sel Tabel
+    # Apply Border & Alignment pada Sel Data
     for r in range(start_row, ws.max_row + 1):
         for c in range(1, max_col + 1):
-            ws.cell(row=r, column=c).border = thin_border
+            cell = ws.cell(row=r, column=c)
+            cell.border = thin_border
+            if r > start_row:
+                cell.alignment = Alignment(
+                    horizontal="center", vertical="center"
+                )
 
     # Auto-adjust column width
     for col in ws.columns:
@@ -110,7 +118,6 @@ def apply_table_formatting(ws, start_row, max_col):
         if col[0].column > max_col:
             continue
         for cell in col:
-            # Skip row 1 & 2 untuk perhitungan lebar kolom
             if cell.row < start_row:
                 continue
             if cell.value:
@@ -130,7 +137,7 @@ if uploaded_file is not None:
 
         df_sjm = pd.DataFrame({
             "TGL": df["TGL"],
-            "Vendor": "LION PARCEL",
+            "Vendor": df["Vendor"],
             "SC Orgin": df["Sc Origin"],
             "DESTINATION": df["Sc Destination"],
             "LT NUMBER": df["Lt Number"],
@@ -186,7 +193,7 @@ if uploaded_file is not None:
             "Sum of Gross Weight",
         ]
 
-        # --- PREVIEW ON WEB ---
+        # --- PREVIEW WEB STREAMLIT ---
         t1, t2, t3, t4 = st.tabs(
             ["📋 Sheet SJM", "🏷️ Sheet MARKING", "📑 Sheet PVT", "📊 Sheet3"]
         )
@@ -207,31 +214,66 @@ if uploaded_file is not None:
         with t4:
             st.dataframe(df_sheet3, use_container_width=True, hide_index=True)
 
-        # --- GENERATE EXCEL WITH BORDERS & AUTO-WIDTH ---
+        # --- EXCEL FORMATTING SAMA PERSIS CONTOH ---
         wb = openpyxl.Workbook()
 
         # 1. SHEET SJM
         ws_sjm = wb.active
         ws_sjm.title = "SJM"
-        ws_sjm.cell(
+
+        # Row 1 Title (Merge A1:H1)
+        ws_sjm.merge_cells("A1:H1")
+        cell_r1 = ws_sjm.cell(
             row=1, column=1, value="SURAT JALAN MANUAL SURABAYA DC VIA LION STD"
         )
-        ws_sjm.cell(row=2, column=1, value="14 SEPTEMBER 2026 TRIP 2")
-        ws_sjm.cell(row=2, column=9, value=len(df))
+        cell_r1.font = Font(bold=True, size=11, name="Calibri")
+        cell_r1.alignment = Alignment(horizontal="center", vertical="center")
 
+        # Row 2 Title & Counter (Merge A2:H2, I2 Jumlah Total)
+        ws_sjm.merge_cells("A2:H2")
+        cell_r2 = ws_sjm.cell(row=2, column=1, value="14 SEPTEMBER 2026 TRIP 2")
+        cell_r2.font = Font(bold=True, size=11, name="Calibri")
+        cell_r2.alignment = Alignment(horizontal="center", vertical="center")
+
+        total_cell = ws_sjm.cell(row=2, column=9, value=len(df))
+        total_cell.font = Font(bold=True, size=11, name="Calibri")
+        total_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        # Row 3 Header Names
         for c_idx, col_name in enumerate(df_sjm.columns, 1):
             ws_sjm.cell(row=3, column=c_idx, value=col_name)
 
+        # Data Rows
         for r_idx, row_val in enumerate(df_sjm.itertuples(index=False), 4):
             for c_idx, val in enumerate(row_val, 1):
                 ws_sjm.cell(row=r_idx, column=c_idx, value=val)
 
         apply_table_formatting(ws_sjm, start_row=3, max_col=len(df_sjm.columns))
 
+        # Apply Top Header Border for Row 1 & 2
+        thin_border = Border(
+            left=Side(style="thin", color="000000"),
+            right=Side(style="thin", color="000000"),
+            top=Side(style="thin", color="000000"),
+            bottom=Side(style="thin", color="000000"),
+        )
+        for r in range(1, 3):
+            for c in range(1, 10):
+                ws_sjm.cell(row=r, column=c).border = thin_border
+
         # 2. SHEET MARKING
         ws_mk = wb.create_sheet(title="MARKING")
-        ws_mk.cell(row=1, column=1, value="MARKING SPX OSO SUB DC CYCLE ")
-        ws_mk.cell(row=2, column=1, value="14 SEPTEMBER 2026 TRIP 2")
+        ws_mk.merge_cells("A1:K1")
+        cell_mk1 = ws_mk.cell(
+            row=1, column=1, value="MARKING SPX OSO SUB DC CYCLE "
+        )
+        cell_mk1.font = Font(bold=True, name="Calibri")
+        cell_mk1.alignment = Alignment(horizontal="center")
+
+        ws_mk.merge_cells("A2:K2")
+        cell_mk2 = ws_mk.cell(row=2, column=1, value="14 SEPTEMBER 2026 TRIP 2")
+        cell_mk2.font = Font(bold=True, name="Calibri")
+        cell_mk2.alignment = Alignment(horizontal="center")
 
         for c_idx, col_name in enumerate(df_marking.columns, 1):
             ws_mk.cell(row=3, column=c_idx, value=col_name)
