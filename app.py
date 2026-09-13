@@ -239,6 +239,12 @@ if uploaded_file is not None:
         grey_fill = PatternFill(
             start_color="D9D9D9", end_color="D9D9D9", fill_type="solid"
         )
+        thin_border = Border(
+            left=Side(style="thin", color="000000"),
+            right=Side(style="thin", color="000000"),
+            top=Side(style="thin", color="000000"),
+            bottom=Side(style="thin", color="000000"),
+        )
 
         # 1. SHEET SJM
         ws_sjm = wb.active
@@ -266,22 +272,30 @@ if uploaded_file is not None:
             for c_idx, val in enumerate(row_val, 1):
                 ws_sjm.cell(row=r_idx, column=c_idx, value=val)
 
-        # Penambahan Baris Grand Total SJM
+        # BARIS GRAND TOTAL SJM: Merge Kolom A-F & Sum Berat di Kolom G
         sjm_last_row = len(df) + 3
         sjm_gt_row = sjm_last_row + 1
-        ws_sjm.cell(row=sjm_gt_row, column=1, value="Grand Total").font = Font(bold=True, name="Calibri")
-        ws_sjm.cell(row=sjm_gt_row, column=6, value=f"=COUNTA(F4:F{sjm_last_row})").font = Font(bold=True, name="Calibri")
-        ws_sjm.cell(row=sjm_gt_row, column=7, value=f"=SUM(G4:G{sjm_last_row})").font = Font(bold=True, name="Calibri")
+        ws_sjm.merge_cells(
+            start_row=sjm_gt_row, start_column=1, end_row=sjm_gt_row, end_column=6
+        )
+        gt_sjm_label = ws_sjm.cell(row=sjm_gt_row, column=1, value="Grand Total")
+        gt_sjm_label.font = Font(bold=True, name="Calibri")
+        gt_sjm_label.alignment = Alignment(
+            horizontal="center", vertical="center"
+        )
+
+        gt_sjm_val = ws_sjm.cell(
+            row=sjm_gt_row, column=7, value=f"=SUM(G4:G{sjm_last_row})"
+        )
+        gt_sjm_val.font = Font(bold=True, name="Calibri")
+        gt_sjm_val.alignment = Alignment(
+            horizontal="center", vertical="center"
+        )
 
         apply_table_formatting(ws_sjm, start_row=3, max_col=len(df_sjm.columns))
         for r in range(1, 3):
             for c in range(1, 10):
-                ws_sjm.cell(row=r, column=c).border = Border(
-                    left=Side(style="thin", color="000000"),
-                    right=Side(style="thin", color="000000"),
-                    top=Side(style="thin", color="000000"),
-                    bottom=Side(style="thin", color="000000"),
-                )
+                ws_sjm.cell(row=r, column=c).border = thin_border
 
         # 2. SHEET MARKING
         ws_mk = wb.create_sheet(title="MARKING")
@@ -294,12 +308,7 @@ if uploaded_file is not None:
         for c in range(1, 12):
             cell = ws_mk.cell(row=1, column=c)
             cell.fill = red_fill
-            cell.border = Border(
-                left=Side(style="thin", color="000000"),
-                right=Side(style="thin", color="000000"),
-                top=Side(style="thin", color="000000"),
-                bottom=Side(style="thin", color="000000"),
-            )
+            cell.border = thin_border
 
         ws_mk.merge_cells("A2:K2")
         cell_mk2 = ws_mk.cell(row=2, column=1, value="14 SEPTEMBER 2026 TRIP 2")
@@ -308,12 +317,7 @@ if uploaded_file is not None:
         for c in range(1, 12):
             cell = ws_mk.cell(row=2, column=c)
             cell.fill = yellow_fill
-            cell.border = Border(
-                left=Side(style="thin", color="000000"),
-                right=Side(style="thin", color="000000"),
-                top=Side(style="thin", color="000000"),
-                bottom=Side(style="thin", color="000000"),
-            )
+            cell.border = thin_border
 
         for c_idx, col_name in enumerate(df_marking.columns, 1):
             ws_mk.cell(row=3, column=c_idx, value=col_name)
@@ -335,23 +339,32 @@ if uploaded_file is not None:
             )
             ws_mk.cell(row=r_idx, column=11, value=r._7)
 
-        # Footer / Grand Total Row MARKING
+        # BARIS GRAND TOTAL MARKING
         mk_last_row = len(df) + 3
         footer_row = mk_last_row + 1
-        ws_mk.cell(row=footer_row, column=1, value="Grand Total").font = Font(bold=True, color="FFFFFF", name="Calibri")
-        ws_mk.cell(row=footer_row, column=6, value=f"=COUNTA(F4:F{mk_last_row})").font = Font(bold=True, color="FFFFFF", name="Calibri")
-        ws_mk.cell(row=footer_row, column=8, value=f"=SUM(H4:H{mk_last_row})").font = Font(bold=True, color="FFFFFF", name="Calibri")
-        ws_mk.cell(row=footer_row, column=11, value=f"=SUM(K4:K{mk_last_row})").font = Font(bold=True, color="FFFFFF", name="Calibri")
+        ws_mk.merge_cells(
+            start_row=footer_row, start_column=1, end_row=footer_row, end_column=7
+        )
+        gt_mk_label = ws_mk.cell(row=footer_row, column=1, value="Grand Total")
+        gt_mk_label.font = Font(bold=True, color="FFFFFF", name="Calibri")
+        gt_mk_label.alignment = Alignment(horizontal="center", vertical="center")
+
+        gt_mk_val1 = ws_mk.cell(
+            row=footer_row, column=8, value=f"=SUM(H4:H{mk_last_row})"
+        )
+        gt_mk_val1.font = Font(bold=True, color="FFFFFF", name="Calibri")
+        gt_mk_val1.alignment = Alignment(horizontal="center", vertical="center")
+
+        gt_mk_val2 = ws_mk.cell(
+            row=footer_row, column=11, value=f"=SUM(K4:K{mk_last_row})"
+        )
+        gt_mk_val2.font = Font(bold=True, color="FFFFFF", name="Calibri")
+        gt_mk_val2.alignment = Alignment(horizontal="center", vertical="center")
 
         for c in range(1, 12):
             cell = ws_mk.cell(row=footer_row, column=c)
             cell.fill = red_fill
-            cell.border = Border(
-                left=Side(style="thin", color="000000"),
-                right=Side(style="thin", color="000000"),
-                top=Side(style="thin", color="000000"),
-                bottom=Side(style="thin", color="000000"),
-            )
+            cell.border = thin_border
 
         apply_table_formatting(
             ws_mk, start_row=3, max_col=len(df_marking.columns)
