@@ -27,87 +27,18 @@ MARKING_MAP = {
     "Mantikulore DC": "PLW-C1-1",
     "Pekanbaru 2 DC": "PKU-C1-1",
     "Pekanbaru DC": "PKU-C1-1",
+    "Sorong Utara DC": "SOQ-C1-1",
+    "Tarakan Barat 4 Hub": "TRK-C1-1",
+    "Tarakan Barat Hub": "TRK-C1-1",
+    "Tarakan Timur Hub": "TRK-C1-1",
+    "Tarakan Utara Hub": "TRK-C1-1",
+    "Teluk Mutiara Hub": "ARD-C1-1",
     "Ternate Utara Hub": "TTE-C1-1",
     "Wua-Wua DC": "KDI-C1-1",
 }
 
 
-def extract_data_from_pdf(pdf_file):
-    reader = pypdf.PdfReader(pdf_file)
-    extracted_rows = []
-
-    # Daftar nama DC valid yang ada di MARKING_MAP
-    valid_destinations = list(MARKING_MAP.keys())
-
-    for page in reader.pages:
-        text = page.extract_text()
-        if not text:
-            continue
-
-        # 1. Ekstraksi LT Number
-        lt_match = re.search(r"\b(LT[A-Z0-9]{8,})\b", text)
-        lt_num = lt_match.group(1) if lt_match else ""
-
-        # 2. Ekstraksi Destination (Pilih yang cocok dengan MARKING_MAP & BUKAN Surabaya DC)
-        dest = ""
-
-        # Langkah A: Cari nama DC dari daftar valid yang ada di dalam teks halaman PDF
-        for valid_dest in valid_destinations:
-            if valid_dest in text and valid_dest != "SURABAYA DC":
-                dest = valid_dest
-                break
-
-        # Langkah B: Jika tidak ditemukan di daftar, cari kata berakhiran "DC" / "Hub" yang bukan SURABAYA
-        if not dest:
-            all_dcs = re.findall(
-                r"\b([A-Za-z0-9\s-]+?\s*(?:DC|Hub))\b", text, re.IGNORECASE
-            )
-            for d in all_dcs:
-                d_clean = d.strip()
-                if "SURABAYA" not in d_clean.upper():
-                    dest = d_clean
-                    break
-
-        # 3. Ekstraksi Tanggal
-        std_match = re.search(r"(\d{4}/\d{2}/\d{2})\s*\d{2}:\d{2}:\d{2}STD", text)
-        if not std_match:
-            std_match = re.search(r":\s*(\d{4}/\d{2}/\d{2})", text)
-        tgl = (
-            std_match.group(1).replace("/", "-")
-            if std_match
-            else "2026-09-14"
-        )
-
-        # 4. Ekstraksi TO Numbers & Weight
-        to_numbers = re.findall(r"\b(TO\d{8}[A-Z0-9]+)\b", text)
-        weights = re.findall(r"\b(\d{1,3}\.\d{2,3})\b", text)
-
-        for i, to_num in enumerate(to_numbers):
-            gw = 0.0
-            if i < len(weights):
-                try:
-                    gw = float(weights[i])
-                except ValueError:
-                    gw = 0.0
-
-            marking = MARKING_MAP.get(dest, "C1-1")
-
-            extracted_rows.append({
-                "TGL": tgl,
-                "Vendor": "Lion Parcel",
-                "Sc Origin": "SURABAYA DC",
-                "Sc Destination": dest,
-                "Lt Number": lt_num,
-                "To Number": to_num,
-                "Marking": marking,
-                "Gross Weight": gw,
-                "Remarks": "BAG",
-            })
-
-    return pd.DataFrame(extracted_rows)
-    
-    def apply_table_formatting(ws, start_row, max_col):
-    """Memberikan border kotak hitam dan auto width kolom."""
+def apply_table_formatting(ws, start_row, max_col):
     thin_border = Border(
         left=Side(style="thin", color="000000"),
         right=Side(style="thin", color="000000"),
@@ -144,6 +75,72 @@ def extract_data_from_pdf(pdf_file):
                 if len(val_str) > max_len:
                     max_len = len(val_str)
         ws.column_dimensions[col_letter].width = max(max_len + 4, 16)
+
+
+def extract_data_from_pdf(pdf_file):
+    reader = pypdf.PdfReader(pdf_file)
+    extracted_rows = []
+    valid_destinations = list(MARKING_MAP.keys())
+
+    for page in reader.pages:
+        text = page.extract_text()
+        if not text:
+            continue
+
+        lt_match = re.search(r"\b(LT[A-Z0-9]{8,})\b", text)
+        lt_num = lt_match.group(1) if lt_match else ""
+
+        dest = ""
+        for valid_dest in valid_destinations:
+            if valid_dest in text and valid_dest != "SURABAYA DC":
+                dest = valid_dest
+                break
+
+        if not dest:
+            all_dcs = re.findall(
+                r"\b([A-Za-z0-9\s-]+?\s*(?:DC|Hub))\b", text, re.IGNORECASE
+            )
+            for d in all_dcs:
+                d_clean = d.strip()
+                if "SURABAYA" not in d_clean.upper():
+                    dest = d_clean
+                    break
+
+        std_match = re.search(r"(\d{4}/\d{2}/\d{2})\s*\d{2}:\d{2}:\d{2}STD", text)
+        if not std_match:
+            std_match = re.search(r":\s*(\d{4}/\d{2}/\d{2})", text)
+        tgl = (
+            std_match.group(1).replace("/", "-")
+            if std_match
+            else "2026-09-14"
+        )
+
+        to_numbers = re.findall(r"\b(TO\d{8}[A-Z0-9]+)\b", text)
+        weights = re.findall(r"\b(\d{1,3}\.\d{2,3})\b", text)
+
+        for i, to_num in enumerate(to_numbers):
+            gw = 0.0
+            if i < len(weights):
+                try:
+                    gw = float(weights[i])
+                except ValueError:
+                    gw = 0.0
+
+            marking = MARKING_MAP.get(dest, "C1-1")
+
+            extracted_rows.append({
+                "TGL": tgl,
+                "Vendor": "Lion Parcel",
+                "Sc Origin": "SURABAYA DC",
+                "Sc Destination": dest,
+                "Lt Number": lt_num,
+                "To Number": to_num,
+                "Marking": marking,
+                "Gross Weight": gw,
+                "Remarks": "BAG",
+            })
+
+    return pd.DataFrame(extracted_rows)
 
 
 uploaded_file = st.file_uploader("Upload File PDF SPX", type=["pdf"])
@@ -212,7 +209,6 @@ if uploaded_file is not None:
             "Sum of Gross Weight",
         ]
 
-        # PREVIEW WEB STREAMLIT
         t1, t2, t3, t4 = st.tabs(
             ["📋 Sheet SJM", "🏷️ Sheet MARKING", "📑 Sheet PVT", "📊 Sheet3"]
         )
@@ -233,7 +229,6 @@ if uploaded_file is not None:
         with t4:
             st.dataframe(df_sheet3, use_container_width=True, hide_index=True)
 
-        # GENERATE EXCEL FILE
         wb = openpyxl.Workbook()
         red_fill = PatternFill(
             start_color="FF0000", end_color="FF0000", fill_type="solid"
@@ -251,7 +246,6 @@ if uploaded_file is not None:
             bottom=Side(style="thin", color="000000"),
         )
 
-        # 1. SHEET SJM
         ws_sjm = wb.active
         ws_sjm.title = "SJM"
         ws_sjm.merge_cells("A1:H1")
@@ -282,7 +276,6 @@ if uploaded_file is not None:
             for c in range(1, 10):
                 ws_sjm.cell(row=r, column=c).border = thin_border
 
-        # 2. SHEET MARKING
         ws_mk = wb.create_sheet(title="MARKING")
         ws_mk.merge_cells("A1:K1")
         cell_mk1 = ws_mk.cell(
@@ -334,7 +327,6 @@ if uploaded_file is not None:
             ws_mk, start_row=3, max_col=len(df_marking.columns)
         )
 
-        # 3. SHEET PVT
         ws_pvt = wb.create_sheet(title="PVT")
         for c_idx, col_name in enumerate(df_pvt.columns, 1):
             cell = ws_pvt.cell(row=1, column=c_idx, value=col_name)
@@ -377,15 +369,12 @@ if uploaded_file is not None:
             ws_pvt, start_row=1, max_col=len(df_pvt.columns)
         )
 
-        # 4. SHEET SHEET3 (TAMPILAN BARU: HEADER ABU-ABU DARI BARIS 1 & GRAND TOTAL)
         ws_sum = wb.create_sheet(title="Sheet3")
 
-        # Header Row 1 dengan Background Abu-Abu Muda
         for c_idx, col_name in enumerate(df_sheet3.columns, 1):
             cell = ws_sum.cell(row=1, column=c_idx, value=col_name)
             cell.fill = grey_fill
 
-        # Data Rows (Dinamis dari Sheet MARKING)
         unique_dests = df["Sc Destination"].unique()
         last_s3_row = 1
         for s_idx, dest_name in enumerate(unique_dests, 2):
@@ -402,7 +391,6 @@ if uploaded_file is not None:
             )
             last_s3_row = s_idx
 
-        # Grand Total Row (Paling Bawah)
         s3_gt_row = last_s3_row + 1
         s3_gt1 = ws_sum.cell(row=s3_gt_row, column=1, value="Grand Total")
         s3_gt2 = ws_sum.cell(
@@ -434,3 +422,4 @@ if uploaded_file is not None:
             file_name=f"FIXED_SCRIPT_SJ_MANUAL_{uploaded_file.name.replace('.pdf', '')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+        
