@@ -140,10 +140,10 @@ def extract_data_from_pdf(pdf_file):
     df_extracted = pd.DataFrame(extracted_rows)
 
     if not df_extracted.empty:
-        # 1. Balik urutan data (paling bawah di PDF jadi paling atas di Excel)
+        # 1. Balik urutan data (paling bawah di PDF jadi paling atas)
         df_extracted = df_extracted.iloc[::-1].reset_index(drop=True)
 
-        # 2. Penentuan Marking bertambah +1 tiap kelipatan 15 items per destinasi
+        # 2. Marking dinamis bertambah +1 tiap 15 items per destinasi
         marking_list = []
         dest_counters = {}
 
@@ -206,7 +206,6 @@ if uploaded_file is not None:
             "Clear Gw": df["Gross Weight"],
         })
 
-        # Aggregation standar tanpa lambda
         df_pvt = (
             df_marking.groupby("External Number")
             .agg(
@@ -348,22 +347,23 @@ if uploaded_file is not None:
         for c_idx, col_name in enumerate(df_marking.columns, 1):
             ws_mk.cell(row=3, column=c_idx, value=col_name)
 
+        # Pengisian baris aman menggunakan indeks penomoran tuple (r[0], r[1], dst.)
         for r_idx, r in enumerate(df.itertuples(index=False), 4):
-            ws_mk.cell(row=r_idx, column=1, value=r.TGL)
-            ws_mk.cell(row=r_idx, column=2, value=r.Vendor)
-            ws_mk.cell(row=r_idx, column=3, value=r.Sc_Origin)
-            ws_mk.cell(row=r_idx, column=4, value=r.Sc_Destination)
-            ws_mk.cell(row=r_idx, column=5, value=r.Lt_Number)
-            ws_mk.cell(row=r_idx, column=6, value=r.To_Number)
-            ws_mk.cell(row=r_idx, column=7, value=r.Marking)
-            ws_mk.cell(row=r_idx, column=8, value=r.Gross_Weight)
-            ws_mk.cell(row=r_idx, column=9, value=r.Remarks)
+            ws_mk.cell(row=r_idx, column=1, value=r[0])  # TGL
+            ws_mk.cell(row=r_idx, column=2, value=r[1])  # Vendor
+            ws_mk.cell(row=r_idx, column=3, value=r[2])  # Sc Origin
+            ws_mk.cell(row=r_idx, column=4, value=r[3])  # Sc Destination
+            ws_mk.cell(row=r_idx, column=5, value=r[4])  # Lt Number
+            ws_mk.cell(row=r_idx, column=6, value=r[5])  # To Number
+            ws_mk.cell(row=r_idx, column=7, value=r[8])  # Marking
+            ws_mk.cell(row=r_idx, column=8, value=r[6])  # Gross Weight
+            ws_mk.cell(row=r_idx, column=9, value=r[7])  # Remarks
             ws_mk.cell(
                 row=r_idx,
                 column=10,
                 value=f'=G{r_idx}&"/"&E{r_idx}&"/"&I{r_idx}',
             )
-            ws_mk.cell(row=r_idx, column=11, value=r.Gross_Weight)
+            ws_mk.cell(row=r_idx, column=11, value=r[6])  # Gross Weight
 
         # GRAND TOTAL MARKING
         mk_last_row = len(df) + 3
