@@ -206,8 +206,9 @@ if uploaded_file is not None:
             "Clear Gw": df["Gross Weight"],
         })
 
+        # Aggregation PVT berdasarkan External Number unik
         df_pvt = (
-            df_marking.groupby("External Number")
+            df_marking.groupby("External Number", sort=False)
             .agg(
                 Count_of_External_Number=("To Number", "count"),
                 Sum_of_Clear_Gw=("Clear Gw", "sum"),
@@ -221,7 +222,7 @@ if uploaded_file is not None:
         ]
 
         df_sheet3 = (
-            df.groupby("Sc Destination")
+            df.groupby("Sc Destination", sort=False)
             .agg(
                 Count_of_To_Number=("To Number", "count"),
                 Sum_of_Gross_Weight=("Gross Weight", "sum"),
@@ -297,7 +298,7 @@ if uploaded_file is not None:
             for c_idx, val in enumerate(row_val, 1):
                 ws_sjm.cell(row=r_idx, column=c_idx, value=val)
 
-        # GRAND TOTAL SJM: Merge A-F & Sum Berat di Kolom G
+        # GRAND TOTAL SJM
         sjm_last_row = len(df) + 3
         sjm_gt_row = sjm_last_row + 1
         ws_sjm.merge_cells(
@@ -347,23 +348,22 @@ if uploaded_file is not None:
         for c_idx, col_name in enumerate(df_marking.columns, 1):
             ws_mk.cell(row=3, column=c_idx, value=col_name)
 
-        # Pengisian baris aman menggunakan indeks penomoran tuple (r[0], r[1], dst.)
         for r_idx, r in enumerate(df.itertuples(index=False), 4):
-            ws_mk.cell(row=r_idx, column=1, value=r[0])  # TGL
-            ws_mk.cell(row=r_idx, column=2, value=r[1])  # Vendor
-            ws_mk.cell(row=r_idx, column=3, value=r[2])  # Sc Origin
-            ws_mk.cell(row=r_idx, column=4, value=r[3])  # Sc Destination
-            ws_mk.cell(row=r_idx, column=5, value=r[4])  # Lt Number
-            ws_mk.cell(row=r_idx, column=6, value=r[5])  # To Number
-            ws_mk.cell(row=r_idx, column=7, value=r[8])  # Marking
-            ws_mk.cell(row=r_idx, column=8, value=r[6])  # Gross Weight
-            ws_mk.cell(row=r_idx, column=9, value=r[7])  # Remarks
+            ws_mk.cell(row=r_idx, column=1, value=r[0])
+            ws_mk.cell(row=r_idx, column=2, value=r[1])
+            ws_mk.cell(row=r_idx, column=3, value=r[2])
+            ws_mk.cell(row=r_idx, column=4, value=r[3])
+            ws_mk.cell(row=r_idx, column=5, value=r[4])
+            ws_mk.cell(row=r_idx, column=6, value=r[5])
+            ws_mk.cell(row=r_idx, column=7, value=r[8])
+            ws_mk.cell(row=r_idx, column=8, value=r[6])
+            ws_mk.cell(row=r_idx, column=9, value=r[7])
             ws_mk.cell(
                 row=r_idx,
                 column=10,
                 value=f'=G{r_idx}&"/"&E{r_idx}&"/"&I{r_idx}',
             )
-            ws_mk.cell(row=r_idx, column=11, value=r[6])  # Gross Weight
+            ws_mk.cell(row=r_idx, column=11, value=r[6])
 
         # GRAND TOTAL MARKING
         mk_last_row = len(df) + 3
@@ -396,16 +396,16 @@ if uploaded_file is not None:
             ws_mk, start_row=3, max_col=len(df_marking.columns)
         )
 
-        # 3. SHEET PVT
+        # 3. SHEET PVT (DIBERBAIKI: Menggunakan seluruh External Number Unik)
         ws_pvt = wb.create_sheet(title="PVT")
         for c_idx, col_name in enumerate(df_pvt.columns, 1):
             cell = ws_pvt.cell(row=1, column=c_idx, value=col_name)
             cell.fill = grey_fill
 
-        unique_indices = df.drop_duplicates(subset=["Sc Destination"]).index
+        unique_ext_numbers = df_marking["External Number"].unique()
         last_pvt_row = 1
-        for p_idx, first_r in enumerate(unique_indices, 2):
-            ws_pvt.cell(row=p_idx, column=1, value=f"=MARKING!J{first_r+4}")
+        for p_idx, ext_num in enumerate(unique_ext_numbers, 2):
+            ws_pvt.cell(row=p_idx, column=1, value=ext_num)
             ws_pvt.cell(
                 row=p_idx,
                 column=2,
@@ -493,3 +493,4 @@ if uploaded_file is not None:
             file_name=f"FIXED_SCRIPT_SJ_MANUAL_{uploaded_file.name.replace('.pdf', '')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+        
