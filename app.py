@@ -115,46 +115,43 @@ def extract_data_from_pdf(pdf_file):
             else "2026-09-14"
         )
 
-        # Cari semua kemunculan TO Number dan posisinya di halaman ini
-        to_matches = list(re.finditer(r"\b(TO\d{8}[A-Z0-9]+)\b", text))
+        # Pemisahan teks berbasis baris untuk mencocokkan TO dan Berat
+        lines = [line.strip() for line in text.split("\n") if line.strip()]
         
-        # Cari semua kemunculan Angka Desimal Berat dan posisinya
-        weight_matches = list(re.finditer(r"\b(\d{1,3}\.\d{1,3})\b", text))
-
-        for i, to_m in enumerate(to_matches):
-            to_num = to_m.group(1)
-            to_pos = to_m.start()
-
-            # Tentukan batas pencarian berat (sampai TO berikutnya atau end of page)
-            next_to_pos = to_matches[i + 1].start() if i + 1 < len(to_matches) else len(text) + 500
-
-            # Cari weight match yang paling dekat setelah TO ini
-            assigned_gw = 0.0
-            for w_m in weight_matches:
-                w_pos = w_m.start()
-                # Jika posisi berat berada di kisaran TO ini
-                if to_pos - 100 <= w_pos <= next_to_pos:
+        for line in lines:
+            to_match = re.search(r"\b(TO\d{8}[A-Z0-9]+)\b", line)
+            if to_match:
+                to_num = to_match.group(1)
+                
+                # Ekstrak semua angka desimal dalam baris tersebut
+                # Mengabaikan tanggal/jam (misal 2026/09/14 atau 14:20:00)
+                clean_line = re.sub(r"\d{4}/\d{2}/\d{2}", "", line)
+                clean_line = re.sub(r"\d{2}:\d{2}:\d{2}", "", clean_line)
+                
+                weights = re.findall(r"\b(\d{1,3}\.\d{1,3})\b", clean_line)
+                
+                gw = 0.0
+                if weights:
                     try:
-                        assigned_gw = float(w_m.group(1))
-                        break
+                        gw = round(float(weights[0]), 3)
                     except ValueError:
-                        pass
+                        gw = 0.0
 
-            extracted_rows.append({
-                "TGL": tgl,
-                "Vendor": "Lion Parcel",
-                "Sc Origin": "SURABAYA DC",
-                "Sc Destination": dest,
-                "Lt Number": lt_num,
-                "To Number": to_num,
-                "Gross Weight": assigned_gw,
-                "Remarks": "BAG",
-            })
+                extracted_rows.append({
+                    "TGL": tgl,
+                    "Vendor": "Lion Parcel",
+                    "Sc Origin": "SURABAYA DC",
+                    "Sc Destination": dest,
+                    "Lt Number": lt_num,
+                    "To Number": to_num,
+                    "Gross Weight": gw,
+                    "Remarks": "BAG",
+                })
 
     df_extracted = pd.DataFrame(extracted_rows)
 
     if not df_extracted.empty:
-        # Urutan urut dari PDF dibalik (sesuai kebutuhan Anda)
+        # Urutan balik sesuai tampilan PDF asli
         df_extracted = df_extracted.iloc[::-1].reset_index(drop=True)
 
         # Marking dinamis per 15 items
@@ -466,6 +463,6 @@ if uploaded_file is not None:
         st.download_button(
             label="📥 Download File Excel SJM & Marking",
             data=output,
-            file_name=f"MATCHED_SJ_MANUAL_{uploaded_file.name.replace('.pdf', '')}.xlsx",
+            file_name=f"PERFECT_SJ_MANUAL_{uploaded_file.name.replace('.pdf', '')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
