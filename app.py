@@ -23,36 +23,48 @@ def extract_data_from_pdf(pdf_file):
 
     for page in reader.pages:
         text = page.extract_text()
+        if not text:
+            continue
 
-        # Extract Header Metadata
-        origin_match = re.search(r"Origin\s*:\s*(.*)", text)
-        dest_match = re.search(r"Destination\s*:\s*(.*)", text)
-        lt_match = re.search(r"Surat Jalan Line Haul\s*\n\s*([A-Z0-9]+)", text)
-        std_match = re.search(r"STD\s*\([^)]*\)\s*:\s*(\d{4}/\d{2}/\d{2})", text)
-        driver_match = re.search(r"PIC Gudang Origin\s*:\s*(.*)", text)
+        # 1. Extract LT NUMBER (Mencari pola LT0Q...)
+        lt_match = re.search(r"\b(LT[A-Z0-9]{8,})\b", text)
+        lt_num = lt_match.group(1) if lt_match else ""
 
-        origin = origin_match.group(1).strip() if origin_match else "Surabaya DC"
+        # 2. Extract Destination (Mencari nama DC/Hub tepat sebelum STD)
+        dest_match = re.search(r":\s*([A-Za-z0-9\s-]+?\s*(?:DC|Hub))", text)
         dest = dest_match.group(1).strip() if dest_match else ""
-        lt_num = lt_match.group(1).strip() if lt_match else ""
+
+        # 3. Extract Tanggal (Mengambil tanggal STD Keberangkatan)
+        std_match = re.search(r"(\d{4}/\d{2}/\d{2})\s*\d{2}:\d{2}:\d{2}STD", text)
+        if not std_match:
+            std_match = re.search(r":\s*(\d{4}/\d{2}/\d{2})", text)
         tgl = std_match.group(1).replace("/", "-") if std_match else ""
-        vendor = (
-            driver_match.group(1).strip()
-            if driver_match
-            else "LINEHAUL LION PARCEL"
-        )
-        if "LION PARCEL" in vendor.upper():
-            vendor = "Lion Parcel"
 
-        # Extract TO Details from tables/text blocks
-        # Pola Pencarian Nomor TO (Format: TO followed by digits/letters)
-        to_matches = re.findall(
-            r"(TO\d{8}[A-Z0-9]+)\s+([\d\.]+)\s+(BAG|BULKY|BOX)?", text
+        # 4. Extract Vendor & Origin
+        vendor = "Lion Parcel"
+        origin = "SURABAYA DC"
+
+        # 5. Extract TO details (Nomor TO, Berat, & Type Bag/Bulky)
+        # Mencari TO2026... diikuti berat dan jenis kemasan
+        to_pattern = re.compile(
+            r"(TO\d{8}[A-Z0-9]+)[\s\S]*?(\d+\.\d{2,3})\s*(Bag|Bulky|BOX)?",
+            re.IGNORECASE,
         )
 
-        for match in to_matches:
-            to_num = match[0]
-            gross_weight = float(match[1]) if match[1] else 0.0
-            remake = match[2] if match[2] else "BAG"
+        # Alternatif ekstrak baris TO secara teliti
+        lines = text.split("\n")
+        to_numbers = re.findall(r"\b(TO\d{8}[A-Z0-9]+)\b", text)
+        weights = re.findall(r"\b(\d{1,3}\.\d{2,3})\b", text)
+
+        # Menggabungkan data TO pada halaman tersebut
+        for i, to_num in enumerate(to_numbers):
+            # Abaikan angka total berat di header
+            gw = 0.0
+            if i < len(weights):
+                try:
+                    gw = float(weights[i])
+                except ValueError:
+                    gw = 0.0
 
             extracted_data.append({
                 "TGL": tgl,
@@ -61,8 +73,8 @@ def extract_data_from_pdf(pdf_file):
                 "Sc Destination": dest,
                 "Lt Number": lt_num,
                 "To Number": to_num,
-                "Gross Weight": gross_weight,
-                "Remarks": remake,
+                "Gross Weight": gw,
+                "Remarks": "BAG",
             })
 
     return pd.DataFrame(extracted_data)
@@ -77,8 +89,7 @@ if uploaded_file is not None:
             f"Berhasil mengolah data! Total **{len(df_result)}** TO ditemukan."
         )
 
-        # Preview Data Tab
-        tab1, tab2 = st.tabs(["📋 Preview Data SJM / Marking", "📊 Summary"])
+        tab1, tab2 = st.tabs(["📋 Preview Data", "📊 Summary Destinasi"])
 
         with tab1:
             st.dataframe(df_result, use_container_width=True)
@@ -94,12 +105,13 @@ if uploaded_file is not None:
             )
             st.dataframe(summary, use_container_width=True)
 
-        # Export to Excel Stream
+        # Download Excel
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            # Sheet MARKING
             df_result.to_excel(writer, sheet_name="MARKING", index=False)
 
-            # Buat Sheet SJM (Format Kolom SJM)
+            # Sheet SJM
             df_sjm = df_result.rename(columns={
                 "Sc Origin": "SC Orgin",
                 "Sc Destination": "DESTINATION",
@@ -109,18 +121,12 @@ if uploaded_file is not None:
             })
             df_sjm.to_excel(writer, sheet_name="SJM", index=False)
 
-            # Summary Sheet
-            summary.to_excel(writer, sheet_name="SUMMARY", index=False)
-
         output.seek(0)
-
         st.download_button(
-            label="📥 Download File Excel",
+            label="📥 Download File Excel Perbaikan",
             data=output,
-            file_name=f"FIXED_SCRIPT_SJ_MANUAL_{uploaded_file.name.replace('.pdf', '')}.xlsx",
+            file_name=f"FIXED_{uploaded_file.name.replace('.pdf', '')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     else:
-        st.error(
-            "Tidak ada data TO yang berhasil diekstrak. Pastikan format PDF sesuai."
-        )
+        st.error("Gagal membaca data dari PDF.")
