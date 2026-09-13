@@ -17,23 +17,48 @@ st.title("📦 SPX Laporan Scan PDF ➡️ Excel Converter")
 MARKING_MAP = {
     "Abepura DC": "DJJ-C1-1",
     "Alak DC": "KOE-C1-1",
-    "Banjarbaru DC": "BDJ-C1-1",
-    "Banjarmasin 2 DC": "BDJ-C1-1",
-    "Banjarmasin DC": "BDJ-C1-1",
+    "Bacan Hub": "LAH-C1-1",
+    "Baguala DC": "AMQ-C1-1",
+    "Balikpapan DC": "BPN-C1-1",
+    "Banjarmasin DC": "BDJ1-C1-1",
+    "Banjarmasin 2 DC": "BDJ2-C1-1",
+    "Banjarbaru DC": "BJB-C1-1",
     "Batam DC": "BTH-C1-1",
     "Dungingi DC": "GTO-C1-1",
+    "Kalawat DC": "MDU-C1-1",
+    "Kota Waingapu Hub": "WGP-C1-1",
+    "Kota Waingapu 2 Hub": "WGP2-C1-1",
+    "Kota Waingapu 4 Hub": "WGP4-C1-1",
     "Labuhan Bajo DC": "LBJ-C1-1",
+    "Loli Hub": "TMC2-C1-1",
+    "Loura (Laura) Hub": "TMC-C1-1",
     "Manokwari Barat DC": "MKW-C1-1",
     "Mantikulore DC": "PLW-C1-1",
-    "Pekanbaru 2 DC": "PKU-C1-1",
+    "Medan DC": "KNO-C1-1",
+    "Medan Amplas DC": "KNO2-C1-1",
+    "Medan Deli DC": "KNO3-C1-1",
+    "Merauke DC": "MKQ-C1-1",
+    "Mimika Baru Hub": "TIM-C1-1",
+    "Nabire Hub": "NBX-C1-1",
+    "Palangka Raya DC": "PKY-C1-1",
+    "Percut Sei Tuan DC": "PST-C1-1",
     "Pekanbaru DC": "PKU-C1-1",
+    "Pekanbaru 2 DC": "PKU2-C1-1",
+    "Pontianak DC": "PNK-C1-1",
+    "Pontianak 2 DC": "PNK2-C1-1",
+    "Sungai Kakap DC": "PNK3-C1-1",
     "Sorong Utara DC": "SOQ-C1-1",
-    "Tarakan Barat 4 Hub": "TRK-C1-1",
-    "Tarakan Barat Hub": "TRK-C1-1",
-    "Tarakan Timur Hub": "TRK-C1-1",
-    "Tarakan Utara Hub": "TRK-C1-1",
+    "Tarakan Barat Hub": "TRKB-C1-1",
+    "Tarakan Barat 4 Hub": "TRKB4-C1-1",
+    "Tarakan Timur Hub": "TRKT-C1-1",
+    "Tarakan Utara Hub": "TRKU-C1-1",
     "Teluk Mutiara Hub": "ARD-C1-1",
-    "Ternate Utara Hub": "TTE-C1-1",
+    "Ternate Hub": "TTE-C1-1",
+    "Ternate Utara Hub": "TTU-C1-1",
+    "Ternate Selatan Hub": "TTS-C1-1",
+    "Ternate Selatan 2 Hub": "TTS2-C1-1",
+    "Ternate Selatan 3 Hub": "TTS3-C1-1",
+    "Wamena Hub": "WMX-C1-1",
     "Wua-Wua DC": "KDI-C1-1",
 }
 
@@ -121,17 +146,14 @@ def extract_data_from_pdf(pdf_file):
                 if to_match:
                     to_num = to_match.group(1)
 
-                    # Hapus pola tanggal/waktu agar angka tanggal tidak salah terdeteksi berat
                     clean_line = re.sub(r"\d{4}/\d{2}/\d{2}", "", line)
                     clean_line = re.sub(r"\d{2}:\d{2}:\d{2}", "", clean_line)
 
-                    # Menangkap angka desimal (titik maupun koma)
                     weights = re.findall(r"\b(\d{1,3}[\.,]\d{1,3})\b", clean_line)
 
                     gw = 0.0
                     if weights:
                         try:
-                            # Ubah koma menjadi titik untuk konversi float
                             val_str = weights[0].replace(",", ".")
                             gw = round(float(val_str), 3)
                         except ValueError:
