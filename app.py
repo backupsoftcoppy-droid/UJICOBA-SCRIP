@@ -115,37 +115,46 @@ def extract_data_from_pdf(pdf_file):
             else "2026-09-14"
         )
 
-        # Perbaikan ekstraksi baris agar TO & Gross Weight dipasangkan secara presisi
-        lines = text.split("\n")
-        for line in lines:
-            to_match = re.search(r"\b(TO\d{8}[A-Z0-9]+)\b", line)
-            if to_match:
-                to_num = to_match.group(1)
-                
-                # Cari pola berat (desimal) khusus yang berada di baris TO tersebut
-                weight_match = re.search(r"\b(\d{1,3}\.\d{2,3})\b", line)
-                gw = 0.0
-                if weight_match:
-                    try:
-                        gw = round(float(weight_match.group(1)), 3)
-                    except ValueError:
-                        gw = 0.0
+        # Cari semua kemunculan TO Number dan posisinya di halaman ini
+        to_matches = list(re.finditer(r"\b(TO\d{8}[A-Z0-9]+)\b", text))
+        
+        # Cari semua kemunculan Angka Desimal Berat dan posisinya
+        weight_matches = list(re.finditer(r"\b(\d{1,3}\.\d{1,3})\b", text))
 
-                extracted_rows.append({
-                    "TGL": tgl,
-                    "Vendor": "Lion Parcel",
-                    "Sc Origin": "SURABAYA DC",
-                    "Sc Destination": dest,
-                    "Lt Number": lt_num,
-                    "To Number": to_num,
-                    "Gross Weight": gw,
-                    "Remarks": "BAG",
-                })
+        for i, to_m in enumerate(to_matches):
+            to_num = to_m.group(1)
+            to_pos = to_m.start()
+
+            # Tentukan batas pencarian berat (sampai TO berikutnya atau end of page)
+            next_to_pos = to_matches[i + 1].start() if i + 1 < len(to_matches) else len(text) + 500
+
+            # Cari weight match yang paling dekat setelah TO ini
+            assigned_gw = 0.0
+            for w_m in weight_matches:
+                w_pos = w_m.start()
+                # Jika posisi berat berada di kisaran TO ini
+                if to_pos - 100 <= w_pos <= next_to_pos:
+                    try:
+                        assigned_gw = float(w_m.group(1))
+                        break
+                    except ValueError:
+                        pass
+
+            extracted_rows.append({
+                "TGL": tgl,
+                "Vendor": "Lion Parcel",
+                "Sc Origin": "SURABAYA DC",
+                "Sc Destination": dest,
+                "Lt Number": lt_num,
+                "To Number": to_num,
+                "Gross Weight": assigned_gw,
+                "Remarks": "BAG",
+            })
 
     df_extracted = pd.DataFrame(extracted_rows)
 
     if not df_extracted.empty:
-        # Urutan sesuai urutan dokumen PDF (dibalik)
+        # Urutan urut dari PDF dibalik (sesuai kebutuhan Anda)
         df_extracted = df_extracted.iloc[::-1].reset_index(drop=True)
 
         # Marking dinamis per 15 items
@@ -181,7 +190,7 @@ if uploaded_file is not None:
     if not df.empty:
         total_rows = len(df)
         total_gw = round(df["Gross Weight"].sum(), 3)
-        st.success(f"Berhasil! Total **{total_rows}** TO ditemukan | Total GW: **{total_gw}** kg")
+        st.success(f"Berhasil! Total **{total_rows}** TO | Total GW: **{total_gw:,.3f}** kg")
 
         df_sjm = pd.DataFrame({
             "TGL": df["TGL"],
@@ -306,7 +315,6 @@ if uploaded_file is not None:
             for c_idx, val in enumerate(row_val, 1):
                 ws_sjm.cell(row=r_idx, column=c_idx, value=val)
 
-        # Grand Total SJM
         sjm_last_row = total_rows + 3
         sjm_gt_row = sjm_last_row + 1
         ws_sjm.merge_cells(
@@ -360,7 +368,6 @@ if uploaded_file is not None:
             for c_idx, val in enumerate(r, 1):
                 ws_mk.cell(row=r_idx, column=c_idx, value=val)
 
-        # Grand Total Marking
         mk_last_row = total_rows + 3
         footer_row = mk_last_row + 1
         ws_mk.merge_cells(
@@ -459,6 +466,6 @@ if uploaded_file is not None:
         st.download_button(
             label="📥 Download File Excel SJM & Marking",
             data=output,
-            file_name=f"ACCURATE_SJ_MANUAL_{uploaded_file.name.replace('.pdf', '')}.xlsx",
+            file_name=f"MATCHED_SJ_MANUAL_{uploaded_file.name.replace('.pdf', '')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
