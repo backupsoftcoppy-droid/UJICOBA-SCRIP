@@ -121,7 +121,7 @@ def apply_table_formatting(ws, start_row, max_col):
                 val_str = str(cell.value)
                 if len(val_str) > max_len:
                     max_len = len(val_str)
-        ws.column_dimensions[col_letter].width = max(max_len + 4, 15)
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 16)
 
 
 uploaded_file = st.file_uploader("Upload File PDF SPX", type=["pdf"])
@@ -312,15 +312,12 @@ if uploaded_file is not None:
             ws_mk, start_row=3, max_col=len(df_marking.columns)
         )
 
-        # 3. SHEET PVT (PERSIS SESUAI TAMPILAN GAMBAR PVT BARU)
+        # 3. SHEET PVT
         ws_pvt = wb.create_sheet(title="PVT")
-
-        # Header Row 1 dengan Background Abu-Abu Muda
         for c_idx, col_name in enumerate(df_pvt.columns, 1):
             cell = ws_pvt.cell(row=1, column=c_idx, value=col_name)
             cell.fill = grey_fill
 
-        # Data Rows (Mulai Row 2)
         unique_indices = df.drop_duplicates(subset=["Sc Destination"]).index
         last_pvt_row = 1
         for p_idx, first_r in enumerate(unique_indices, 2):
@@ -337,7 +334,6 @@ if uploaded_file is not None:
             )
             last_pvt_row = p_idx
 
-        # Grand Total Row (Paling Bawah)
         gt_row = last_pvt_row + 1
         gt_cell1 = ws_pvt.cell(row=gt_row, column=1, value="Grand Total")
         gt_cell2 = ws_pvt.cell(
@@ -359,17 +355,51 @@ if uploaded_file is not None:
             ws_pvt, start_row=1, max_col=len(df_pvt.columns)
         )
 
-        # 4. SHEET SHEET3
+        # 4. SHEET SHEET3 (TAMPILAN BARU: HEADER ABU-ABU DARI BARIS 1 & GRAND TOTAL)
         ws_sum = wb.create_sheet(title="Sheet3")
+
+        # Header Row 1 dengan Background Abu-Abu Muda
         for c_idx, col_name in enumerate(df_sheet3.columns, 1):
-            ws_sum.cell(row=3, column=c_idx, value=col_name)
-        for s_idx, r in enumerate(df_sheet3.itertuples(index=False), 4):
-            ws_sum.cell(row=s_idx, column=1, value=r[0])
-            ws_sum.cell(row=s_idx, column=2, value=r[1])
-            ws_sum.cell(row=s_idx, column=3, value=r[2])
+            cell = ws_sum.cell(row=1, column=c_idx, value=col_name)
+            cell.fill = grey_fill
+
+        # Data Rows (Dinamis dari Sheet MARKING)
+        unique_dests = df["Sc Destination"].unique()
+        last_s3_row = 1
+        for s_idx, dest_name in enumerate(unique_dests, 2):
+            ws_sum.cell(row=s_idx, column=1, value=dest_name)
+            ws_sum.cell(
+                row=s_idx,
+                column=2,
+                value=f"=COUNTIF(MARKING!D$4:D${len(df)+3}, A{s_idx})",
+            )
+            ws_sum.cell(
+                row=s_idx,
+                column=3,
+                value=f"=SUMIF(MARKING!D$4:D${len(df)+3}, A{s_idx}, MARKING!H$4:H${len(df)+3})",
+            )
+            last_s3_row = s_idx
+
+        # Grand Total Row (Paling Bawah)
+        s3_gt_row = last_s3_row + 1
+        s3_gt1 = ws_sum.cell(row=s3_gt_row, column=1, value="Grand Total")
+        s3_gt2 = ws_sum.cell(
+            row=s3_gt_row, column=2, value=f"=SUM(B2:B{last_s3_row})"
+        )
+        s3_gt3 = ws_sum.cell(
+            row=s3_gt_row, column=3, value=f"=SUM(C2:C{last_s3_row})"
+        )
+
+        s3_gt1.font = Font(bold=True, name="Calibri")
+        s3_gt2.font = Font(bold=True, name="Calibri")
+        s3_gt3.font = Font(bold=True, name="Calibri")
+
+        s3_gt1.fill = grey_fill
+        s3_gt2.fill = grey_fill
+        s3_gt3.fill = grey_fill
 
         apply_table_formatting(
-            ws_sum, start_row=3, max_col=len(df_sheet3.columns)
+            ws_sum, start_row=1, max_col=len(df_sheet3.columns)
         )
 
         output = io.BytesIO()
