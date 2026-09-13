@@ -41,28 +41,33 @@ def extract_data_from_pdf(pdf_file):
         if not text:
             continue
 
+        # 1. Ekstraksi LT Number
         lt_match = re.search(r"\b(LT[A-Z0-9]{8,})\b", text)
         lt_num = lt_match.group(1) if lt_match else ""
 
-        # Ekstraksi SC Destination (Tujuan) yang benar dari teks PDF
+        # 2. Ekstraksi Sc Destination (Tujuan Spesifik)
         dest = ""
-        # Mencari pola "Destination:" atau "Tujuan:" atau mengambil nama DC selain SURABAYA DC
+        # Mencari teks yang persis berada di sebelah label Destination / SC Destination / Tujuan
         dest_match = re.search(
-            r"(?:Destination|Tujuan|Ke|DEST)\s*:\s*([A-Za-z0-9\s-]+?\s*(?:DC|Hub))",
+            r"(?:SC\s*Destination|Destination|Tujuan)\s*:\s*([A-Za-z0-9\s-]+?\s*(?:DC|Hub))",
             text,
             re.IGNORECASE,
         )
+
         if dest_match:
             dest = dest_match.group(1).strip()
         else:
-            # Mengambil daftar DC yang bukan SURABAYA DC
-            all_dcs = re.findall(r"\b([A-Za-z0-9\s-]+?\s*(?:DC|Hub))\b", text)
+            # Jika tidak ada label explicit, ambil nama DC yang BUKAN SURABAYA DC
+            all_dcs = re.findall(
+                r"\b([A-Za-z0-9\s-]+?\s*(?:DC|Hub))\b", text, re.IGNORECASE
+            )
             for d in all_dcs:
                 d_clean = d.strip()
                 if "SURABAYA" not in d_clean.upper():
                     dest = d_clean
                     break
 
+        # 3. Ekstraksi Tanggal
         std_match = re.search(r"(\d{4}/\d{2}/\d{2})\s*\d{2}:\d{2}:\d{2}STD", text)
         if not std_match:
             std_match = re.search(r":\s*(\d{4}/\d{2}/\d{2})", text)
@@ -72,6 +77,7 @@ def extract_data_from_pdf(pdf_file):
             else "2026-09-14"
         )
 
+        # 4. Ekstraksi TO Numbers & Gross Weight
         to_numbers = re.findall(r"\b(TO\d{8}[A-Z0-9]+)\b", text)
         weights = re.findall(r"\b(\d{1,3}\.\d{2,3})\b", text)
 
@@ -98,7 +104,6 @@ def extract_data_from_pdf(pdf_file):
             })
 
     return pd.DataFrame(extracted_rows)
-
 def apply_table_formatting(ws, start_row, max_col):
     """Memberikan border kotak hitam dan auto width kolom."""
     thin_border = Border(
