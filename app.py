@@ -126,8 +126,6 @@ def extract_data_from_pdf(pdf_file):
                 except ValueError:
                     gw = 0.0
 
-            marking = MARKING_MAP.get(dest, "C1-1")
-
             extracted_rows.append({
                 "TGL": tgl,
                 "Vendor": "Lion Parcel",
@@ -135,12 +133,39 @@ def extract_data_from_pdf(pdf_file):
                 "Sc Destination": dest,
                 "Lt Number": lt_num,
                 "To Number": to_num,
-                "Marking": marking,
                 "Gross Weight": gw,
                 "Remarks": "BAG",
             })
 
-    return pd.DataFrame(extracted_rows)
+    df_extracted = pd.DataFrame(extracted_rows)
+
+    if not df_extracted.empty:
+        # 1. Balik urutan data (paling bawah di PDF jadi paling atas di Excel)
+        df_extracted = df_extracted.iloc[::-1].reset_index(drop=True)
+
+        # 2. Penentuan Marking bertambah +1 tiap kelipatan 15 items per destinasi
+        marking_list = []
+        dest_counters = {}
+
+        for _, row in df_extracted.iterrows():
+            dest_name = row["Sc Destination"]
+            base_marking = MARKING_MAP.get(dest_name, "C1-1")
+
+            count = dest_counters.get(dest_name, 0)
+            batch_num = (count // 15) + 1
+            dest_counters[dest_name] = count + 1
+
+            parts = base_marking.rsplit("-", 1)
+            if len(parts) == 2 and parts[1].isdigit():
+                new_marking = f"{parts[0]}-{batch_num}"
+            else:
+                new_marking = f"{base_marking}-{batch_num}"
+
+            marking_list.append(new_marking)
+
+        df_extracted["Marking"] = marking_list
+
+    return df_extracted
 
 
 uploaded_file = st.file_uploader("Upload File PDF SPX", type=["pdf"])
@@ -181,6 +206,7 @@ if uploaded_file is not None:
             "Clear Gw": df["Gross Weight"],
         })
 
+        # Aggregation standar tanpa lambda
         df_pvt = (
             df_marking.groupby("External Number")
             .agg(
@@ -272,7 +298,7 @@ if uploaded_file is not None:
             for c_idx, val in enumerate(row_val, 1):
                 ws_sjm.cell(row=r_idx, column=c_idx, value=val)
 
-        # BARIS GRAND TOTAL SJM: Merge Kolom A-F & Sum Berat di Kolom G
+        # GRAND TOTAL SJM: Merge A-F & Sum Berat di Kolom G
         sjm_last_row = len(df) + 3
         sjm_gt_row = sjm_last_row + 1
         ws_sjm.merge_cells(
@@ -325,21 +351,21 @@ if uploaded_file is not None:
         for r_idx, r in enumerate(df.itertuples(index=False), 4):
             ws_mk.cell(row=r_idx, column=1, value=r.TGL)
             ws_mk.cell(row=r_idx, column=2, value=r.Vendor)
-            ws_mk.cell(row=r_idx, column=3, value=r._2)
-            ws_mk.cell(row=r_idx, column=4, value=r._3)
-            ws_mk.cell(row=r_idx, column=5, value=r._4)
-            ws_mk.cell(row=r_idx, column=6, value=r._5)
+            ws_mk.cell(row=r_idx, column=3, value=r.Sc_Origin)
+            ws_mk.cell(row=r_idx, column=4, value=r.Sc_Destination)
+            ws_mk.cell(row=r_idx, column=5, value=r.Lt_Number)
+            ws_mk.cell(row=r_idx, column=6, value=r.To_Number)
             ws_mk.cell(row=r_idx, column=7, value=r.Marking)
-            ws_mk.cell(row=r_idx, column=8, value=r._7)
+            ws_mk.cell(row=r_idx, column=8, value=r.Gross_Weight)
             ws_mk.cell(row=r_idx, column=9, value=r.Remarks)
             ws_mk.cell(
                 row=r_idx,
                 column=10,
                 value=f'=G{r_idx}&"/"&E{r_idx}&"/"&I{r_idx}',
             )
-            ws_mk.cell(row=r_idx, column=11, value=r._7)
+            ws_mk.cell(row=r_idx, column=11, value=r.Gross_Weight)
 
-        # BARIS GRAND TOTAL MARKING
+        # GRAND TOTAL MARKING
         mk_last_row = len(df) + 3
         footer_row = mk_last_row + 1
         ws_mk.merge_cells(
