@@ -275,7 +275,7 @@ if uploaded_file is not None:
 
         with t1:
             st.markdown(
-                "**SURAT JALAN MANUAL SURABAYA DC VIA LION STD | 14 SEPTEMBER 2026 TRIP 2**"
+                "**SURAT JALAN MANUAL SURABAYA DC VIA LION STD**"
             )
             st.dataframe(df_sjm, use_container_width=True, hide_index=True)
 
